@@ -82,11 +82,7 @@ def test_dump_atomic_replaces_manifest_without_leaving_temp_files(tmp_path):
 def test_manifest_rejects_unsupported_newer_schema(tmp_path):
     path = tmp_path / "future.toml"
     path.write_text(
-        'schema_version = 999\n'
-        'id = "x"\n'
-        'name = "x"\n'
-        'type = "dataset"\n'
-        'generation = 1\n'
+        'schema_version = 999\nid = "x"\nname = "x"\ntype = "dataset"\ngeneration = 1\n'
     )
 
     with pytest.raises(UnsupportedSchemaVersion):

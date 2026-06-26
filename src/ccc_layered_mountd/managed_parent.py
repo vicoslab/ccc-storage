@@ -156,9 +156,7 @@ class ManagedParent:
             ) from exc
         try:
             if manifest_path.exists():
-                raise ChildExistsError(
-                    f"child {name!r} already exists under {self.parent_path}"
-                )
+                raise ChildExistsError(f"child {name!r} already exists under {self.parent_path}")
             child_id = self._child_id(name)
             overlay_paths = OverlayPaths.for_child(self.overlays_root, child_id)
             ensure_active_upper(overlay_paths)
@@ -187,14 +185,10 @@ class ManagedParent:
         self._validate_name(new_name)
         src = self.manifest_path(old_name)
         if not src.exists():
-            raise ChildNotFoundError(
-                f"child {old_name!r} not found under {self.parent_path}"
-            )
+            raise ChildNotFoundError(f"child {old_name!r} not found under {self.parent_path}")
         dst = self.manifest_path(new_name)
         if dst.exists():
-            raise ChildExistsError(
-                f"child {new_name!r} already exists under {self.parent_path}"
-            )
+            raise ChildExistsError(f"child {new_name!r} already exists under {self.parent_path}")
         manifest = load_manifest(src)
         renamed = ChildManifest(
             id=manifest.id,
@@ -224,9 +218,7 @@ class ManagedParent:
         """
         src = self.manifest_path(name)
         if not src.exists():
-            raise ChildNotFoundError(
-                f"child {name!r} not found under {self.parent_path}"
-            )
+            raise ChildNotFoundError(f"child {name!r} not found under {self.parent_path}")
         manifest = load_manifest(src)
         if manifest.generation > 0 or manifest.pack_stack.lowers:
             raise ManagedParentError(
@@ -255,9 +247,7 @@ class ManagedParent:
     def _load(self, name: str) -> ChildManifest:
         path = self.manifest_path(name)
         if not path.exists():
-            raise ChildNotFoundError(
-                f"child {name!r} not found under {self.parent_path}"
-            )
+            raise ChildNotFoundError(f"child {name!r} not found under {self.parent_path}")
         return load_manifest(path)
 
     def _validate_name(self, name: str) -> None:

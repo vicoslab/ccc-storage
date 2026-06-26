@@ -141,9 +141,9 @@ def test_success_path_commits_new_generation(monkeypatch, fake_nfs):
         sanity_called.append(ctx.env_id)
         return CommandResult(returncode=0)
 
-    result = EnvTransaction(
-        service, manifest.id, runner=runner, sanity_check=sanity
-    ).run(["conda", "install", "numpy"])
+    result = EnvTransaction(service, manifest.id, runner=runner, sanity_check=sanity).run(
+        ["conda", "install", "numpy"]
+    )
 
     assert result.status == "committed"
     assert result.committed is True
@@ -172,9 +172,9 @@ def test_command_failure_preserves_dirty_overlay_and_skips_commit(monkeypatch, f
         sanity_called.append(ctx.env_id)
         return CommandResult(returncode=0)
 
-    result = EnvTransaction(
-        service, manifest.id, runner=runner, sanity_check=sanity
-    ).run(["conda", "install", "does-not-exist"])
+    result = EnvTransaction(service, manifest.id, runner=runner, sanity_check=sanity).run(
+        ["conda", "install", "does-not-exist"]
+    )
 
     assert result.status == "command_failed"
     assert result.committed is False
@@ -199,9 +199,9 @@ def test_sanity_failure_preserves_dirty_overlay_and_skips_commit(monkeypatch, fa
     def sanity(ctx: EnvUpdateContext) -> CommandResult:
         return CommandResult(returncode=1, stderr="ImportError: numpy")
 
-    result = EnvTransaction(
-        service, manifest.id, runner=runner, sanity_check=sanity
-    ).run(["conda", "install", "numpy"])
+    result = EnvTransaction(service, manifest.id, runner=runner, sanity_check=sanity).run(
+        ["conda", "install", "numpy"]
+    )
 
     assert result.status == "sanity_failed"
     assert result.committed is False
@@ -297,9 +297,7 @@ def test_cli_env_txn_command_strips_leading_double_dash(monkeypatch, fake_nfs):
         (ctx.active_upper / "x.py").write_text("x")
         return CommandResult(returncode=0)
 
-    ns = argparse.Namespace(
-        path=manifest.id, command=["--", "pip", "install", "numpy"], json=False
-    )
+    ns = argparse.Namespace(path=manifest.id, command=["--", "pip", "install", "numpy"], json=False)
     rc = env_cli.env_txn_command(ns, service=service, runner=runner)
 
     assert rc == 0

@@ -177,9 +177,7 @@ class NestedMountManager:
     def idle_reap(self, ttl: float, *, now: float | None = None) -> list[str]:
         """Idle-unmount expired child submounts; the parent is never reaped here."""
         return [
-            mid
-            for mid in self._mounts.idle_unmount_expired(ttl, now=now)
-            if mid != self._parent_id
+            mid for mid in self._mounts.idle_unmount_expired(ttl, now=now) if mid != self._parent_id
         ]
 
     def is_child_mounted(self, child_id: str) -> bool:

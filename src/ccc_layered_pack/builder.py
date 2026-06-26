@@ -40,9 +40,7 @@ def plan_boundary_markers(boundaries: list[str] | None) -> BoundaryMarkerPlan:
     return BoundaryMarkerPlan(boundary_paths=paths, marker_files=markers)
 
 
-def create_boundary_markers(
-    src: str | Path, boundaries: list[str] | None
-) -> list[Path]:
+def create_boundary_markers(src: str | Path, boundaries: list[str] | None) -> list[Path]:
     """Create empty boundary dirs + marker files under *src*.
 
     This emits only navigation stubs (an empty dir plus an internal marker file)

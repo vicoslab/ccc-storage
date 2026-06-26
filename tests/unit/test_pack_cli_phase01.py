@@ -43,17 +43,22 @@ def test_build_cli_writes_manifest(monkeypatch, tmp_path, capsys):
 
     monkeypatch.setattr(cli, "build_pack", fake_build)
 
-    assert cli.main([
-        "build",
-        str(src),
-        str(out),
-        "--manifest",
-        str(manifest),
-        "--child-id",
-        "dataset:foo",
-        "--name",
-        "foo",
-    ]) == 0
+    assert (
+        cli.main(
+            [
+                "build",
+                str(src),
+                str(out),
+                "--manifest",
+                str(manifest),
+                "--child-id",
+                "dataset:foo",
+                "--name",
+                "foo",
+            ]
+        )
+        == 0
+    )
 
     assert manifest.exists()
     assert "dataset:foo" in manifest.read_text()

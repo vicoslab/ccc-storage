@@ -3,7 +3,7 @@
 SquashFS-backed **layered storage** for the CCC compute cluster — a monorepo of
 five independently-buildable Python packages plus a shared test harness.
 
-> **Current status — Phase 07 conda env transaction foundation.**
+> **Current status — Phase 08 S3/HPC exchange foundation.**
 > Phase 00 created the safe dev/test harness. Phase 01 added immutable pack
 > metadata, TOML manifests, locks, checksums, and `ccc-pack`. Phase 02 added the
 > newline-JSON control protocol, node-local `MountdService`, Unix control
@@ -26,7 +26,11 @@ five independently-buildable Python packages plus a shared test harness.
 > clean env is a read-only SquashFS child (no overlay in the import path) while a
 > package transaction takes an exclusive per-env update lock, writes to the
 > overlay, runs a sanity check, then commits-on-success / preserves-on-failure
-> (`ccc-layered env-txn` / `env-status`). S3 mirroring and external-HPC flows
+> (`ccc-layered env-txn` / `env-status`). Phase 08 adds a no-network object-store
+> abstraction, best-effort pack/manifest mirroring, verified cold recall, packset
+> bundles with mount graphs/checksums, minimal closure computation with explicit
+> excluded-child stubs, a staged HPC client lookup model, and review-branch import
+> queue / mocked HPC-run orchestration. Real S3/SSH/SLURM/FUSE runtime adapters
 > remain later phases.
 
 ---
@@ -78,7 +82,7 @@ Entry points:
 | `ccc-pack` | `ccc_layered_pack.cli:main` | implemented: `build`, `verify`, `manifest show` |
 | `ccc-layered-mountd` | `ccc_layered_mountd.daemon:main` | implemented: control socket + manifest/status/mount + managed-parent (`--managed-parent`) |
 | `ccc-layered` | `ccc_layered_cli.main:main` | implemented: `doctor`, `status`, `ls`, `mount`, `umount`, `commit`, `pin`, `parent-ls`, `create`, `rename`, `rmdir`, `access` |
-| `ccc-layered-hpc` | `ccc_layered_hpc.client:main` | stub (phase-08) |
+| `ccc-layered-hpc` | `ccc_layered_hpc.client:main` | foundation: `status`, explicit runtime-adapter stubs for `mount`/`push` |
 
 ---
 
@@ -317,14 +321,36 @@ ccc-pack manifest show .scratch/registry/tree.toml
 - `ccc-layered env-txn <env> -- <cmd...>` and `ccc-layered env-status <env>`:
   node-local CLI entry points (the pm command runs on the node near the mount).
 
+**Phase 08 complete:**
+
+- `ccc_layered_hpc.object_store.LocalObjectStore`: deterministic no-network
+  object-store abstraction for tests and future S3 adapters.
+- `ccc_layered_hpc.s3mirror`: best-effort pack+manifest mirroring and verified
+  cold recall. Recall downloads to a temp file, checks size+SHA-256, atomically
+  publishes into the hot pack directory, and leaves the authoritative manifest
+  untouched on corrupt/truncated objects.
+- `ccc_layered_pack.bundle`: packset bundles with `manifest.json` mount graph,
+  `checksums.sha256`, safe extraction, and tamper detection.
+- `ccc_layered_hpc.closure.compute_mount_closure`: computes root + explicitly
+  selected children and records excluded child-boundary stubs so HPC jobs fail
+  clearly if they touch data not exported.
+- `ccc_layered_hpc.client.StagedPackset`: mount-graph lookup core for the future
+  HPC FUSE client; included children resolve, excluded children raise
+  `ExcludedChildError` with a clear reason.
+- `ccc_layered_hpc.importqueue.ImportQueue`: validates/copies incoming delta
+  bundles onto named review branches with provenance and explicit promotion.
+- `ccc_layered_hpc.hpc_run`: mocked SSH/SLURM orchestration foundation that builds
+  a packset, submits through a fake transport, collects an output delta, and
+  lands it in the review queue.
+
 **Still out:** real conda/mamba/pip package installs and the conda transparency
 bucket (hardlink/symlink survival, baked shebangs, binary relocation, real `pip
 -e` round-trip) — gated behind the FUSE/real-runtime lanes (RK-8); the real
 pyfuse3 managed-parent/nested dispatcher binding (mount propagation into
 containers, hot-path latency gate), real writable union mounting, real layered
 compaction merge (needs a mounted union view), boundary-scoped auto-commit wiring
-and child-gen pinning, S3 mirroring/recall, external-HPC closure shipping
-(phase-08), and the full privileged/FUSE/Docker CI matrix.
+and child-gen pinning, real S3 backend wiring, real SSH/SLURM/HPC FUSE runtime
+adapters, and the full privileged/FUSE/Docker CI matrix.
 
 ## License
 

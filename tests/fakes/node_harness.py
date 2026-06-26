@@ -56,9 +56,7 @@ def sweep_stray_mounts(under: str | Path) -> list[str]:
             continue
         if rp == base or rp.startswith(base + os.sep):
             if fusermount:
-                subprocess.run(
-                    [fusermount, "-u", "-z", mp], capture_output=True, check=False
-                )
+                subprocess.run([fusermount, "-u", "-z", mp], capture_output=True, check=False)
             subprocess.run(["umount", "-l", mp], capture_output=True, check=False)
             swept.append(mp)
     return swept

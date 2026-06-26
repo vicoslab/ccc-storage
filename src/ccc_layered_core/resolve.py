@@ -46,9 +46,7 @@ def _normalize(rel_path: str) -> str:
     return str(PurePosixPath(rel_path)).lstrip("/")
 
 
-def _longest_prefix(
-    boundaries: Iterable[ChildBoundary], clean: str
-) -> ChildBoundary | None:
+def _longest_prefix(boundaries: Iterable[ChildBoundary], clean: str) -> ChildBoundary | None:
     best: ChildBoundary | None = None
     best_len = -1
     for boundary in boundaries:
@@ -90,7 +88,7 @@ def resolve_owner_path(
             owner_id=parent_id, boundary=None, relative_path=clean, inner_path=clean
         )
     boundary_path = best.path.strip("/")
-    inner = clean[len(boundary_path):].lstrip("/")
+    inner = clean[len(boundary_path) :].lstrip("/")
     return OwningBoundary(
         owner_id=best.child_id,
         boundary=best,
@@ -148,6 +146,4 @@ class BoundaryRegistry:
         return self._parent_of.get(child_id)
 
     def resolve_owner(self, parent_id: str, rel_path: str) -> OwningBoundary:
-        return resolve_owner_path(
-            self.boundaries_of(parent_id), rel_path, parent_id=parent_id
-        )
+        return resolve_owner_path(self.boundaries_of(parent_id), rel_path, parent_id=parent_id)
