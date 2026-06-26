@@ -3,12 +3,12 @@
 SquashFS-backed **layered storage** for the CCC compute cluster — a monorepo of
 five independently-buildable Python packages plus a shared test harness.
 
-> **Phase 00 — dev environment & test harness.** This is the foundation phase.
-> It stands up the conda env, the repo skeleton, the capability probe, the fakes
-> (fake-NFS, fake-S3, node harness), the synthetic-tree generators, and the hard
-> isolation guard so every later phase is TDD from day one. **There is no
-> production runtime code yet** — the packages import and the CLIs print "not
-> yet implemented". Pack / mount / overlay logic lands in phase-01+.
+> **Current status — Phase 01 pack & manifest foundation.** Phase 00 created the
+> safe dev/test harness. Phase 01 adds immutable pack metadata, TOML manifests,
+> NFS-safe lockfiles, checksums, path-boundary resolution, pack verification,
+> packset tar bundles, and the first real `ccc-pack` commands. Mountd, managed
+> parent FUSE, dirty overlays, auto-commit, S3 mirroring, and external-HPC flows
+> remain later phases.
 
 ---
 
@@ -56,7 +56,7 @@ Entry points (all phase-00 stubs that print a planned surface / `--version`):
 
 | Command | Package | Status |
 |---|---|---|
-| `ccc-pack` | `ccc_layered_pack.cli:main` | stub (phase-01) |
+| `ccc-pack` | `ccc_layered_pack.cli:main` | implemented: `build`, `verify`, `manifest show` |
 | `ccc-layered-mountd` | `ccc_layered_mountd.daemon:main` | stub + `--probe` (phase-02) |
 | `ccc-layered` | `ccc_layered_cli.main:main` | stub + offline `doctor` (phase-02) |
 | `ccc-layered-hpc` | `ccc_layered_hpc.client:main` | stub (phase-08) |
@@ -141,15 +141,43 @@ The unit tier targets **sub-second** total runtime. Capability-gated tiers skip
 
 ---
 
-## Phase 00 scope (this repo, right now)
+## Phase status
 
-**In:** conda env spec, monorepo skeleton (`pyproject`, `Makefile`, package
-dirs + entry points), capability probe, fake-NFS / fake-S3 / node harness,
-synthetic-tree generators, conftest isolation guard + marker wiring, unit tests
-for all of the above, and a safe CI skeleton (lint + unit only).
+**Phase 00 complete:** conda env spec, monorepo skeleton (`pyproject`,
+`Makefile`, package dirs + entry points), capability probe, fake-NFS / fake-S3 /
+node harness, synthetic-tree generators, conftest isolation guard + marker
+wiring, unit tests for all of the above, and a safe CI skeleton.
 
-**Out:** any pack / mount / overlay / daemon / S3 logic (phase-01+), the real CI
-matrix and privileged/FUSE/Docker lanes (phase-09).
+**Phase 01 complete:**
+
+- `ccc_layered_core.manifest`: atomic TOML child manifests with pack stack,
+  overlay/S3 fields, and hierarchical child-boundary metadata.
+- `ccc_layered_core.locks`: NFS-safe `O_CREAT|O_EXCL` lockfiles with holder
+  metadata, heartbeat, and stale-lock stealing.
+- `ccc_layered_core.checksum`: streaming SHA-256 helpers.
+- `ccc_layered_core.resolve`: nearest child-boundary resolution.
+- `ccc_layered_pack.builder`: `mksquashfs` wrapper with deterministic defaults
+  and child-boundary exclusion.
+- `ccc_layered_pack.verify`: checksum/size verification.
+- `ccc_layered_pack.reader`: simple `squashfuse` mount and `unsquashfs` extract
+  helpers for later FUSE tests.
+- `ccc_layered_pack.bundle`: tar packset bundle seed for later S3/HPC transfer.
+- `ccc-pack build`, `ccc-pack verify`, and `ccc-pack manifest show`.
+
+Example:
+
+```bash
+ccc-pack build ./tree .scratch/packs/tree.sqfs \
+  --manifest .scratch/registry/tree.toml \
+  --child-id dataset:tree --name tree
+
+ccc-pack verify .scratch/packs/tree.sqfs --sha256 <hex> --size <bytes>
+ccc-pack manifest show .scratch/registry/tree.toml
+```
+
+**Still out:** mountd, managed parent FUSE, namespace auto-registration, dirty
+overlays, auto-commit/compaction workers, S3 mirroring/recall, external-HPC
+flows, and the full privileged/FUSE/Docker CI matrix.
 
 ## License
 

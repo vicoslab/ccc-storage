@@ -54,9 +54,10 @@ def test_stub_announces_not_implemented(main, _version, prog, capsys) -> None:
     assert "not yet implemented" in out or prog in out
 
 
-def test_pack_unknown_command_is_clean(capsys) -> None:
-    assert pack_main(["build", "/nonexistent", "/tmp/out.sqfs"]) == 0
-    assert "not yet implemented" in capsys.readouterr().out.lower()
+def test_pack_build_missing_source_fails_cleanly(capsys) -> None:
+    assert pack_main(["build", "/nonexistent", "/tmp/out.sqfs"]) == 2
+    out = capsys.readouterr().out.lower()
+    assert "source directory does not exist" in out
 
 
 def test_hpc_unknown_command_is_clean(capsys) -> None:
