@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from ccc_layered_cli import __version__
+from ccc_layered_cli import env as env_cli
 from ccc_layered_core.protocol import Request, decode_response, encode_request
 
 DEFAULT_SOCKET = "/run/ccc-layered/mountd.sock"
@@ -198,6 +199,9 @@ def main(argv: list[str] | None = None) -> int:
     rename.add_argument("to", help="new child name")
     rename.add_argument("--json", action="store_true")
     rename.set_defaults(func=_socket_command)
+
+    # --- managed conda env transactions (phase-07) --------------------------
+    env_cli.add_parsers(sub)
 
     for name in _NOT_IMPLEMENTED:
         sub.add_parser(name, help=f"not yet implemented ({_NOT_IMPLEMENTED[name]})")

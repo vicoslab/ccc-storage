@@ -3,7 +3,7 @@
 SquashFS-backed **layered storage** for the CCC compute cluster — a monorepo of
 five independently-buildable Python packages plus a shared test harness.
 
-> **Current status — Phase 06 hierarchical pack boundary foundation.**
+> **Current status — Phase 07 conda env transaction foundation.**
 > Phase 00 created the safe dev/test harness. Phase 01 added immutable pack
 > metadata, TOML manifests, locks, checksums, and `ccc-pack`. Phase 02 added the
 > newline-JSON control protocol, node-local `MountdService`, Unix control
@@ -22,7 +22,12 @@ five independently-buildable Python packages plus a shared test harness.
 > builds that exclude child subtrees and emit hidden boundary markers,
 > per-boundary overlay write-routing, lazy nested submounts with an idle reaper
 > that bounds the active-submount count, and boundary-aware commit-owner
-> resolution. S3 mirroring and external-HPC flows remain later phases.
+> resolution. Phase 07 applies the layered model to the conda-env workload: a
+> clean env is a read-only SquashFS child (no overlay in the import path) while a
+> package transaction takes an exclusive per-env update lock, writes to the
+> overlay, runs a sanity check, then commits-on-success / preserves-on-failure
+> (`ccc-layered env-txn` / `env-status`). S3 mirroring and external-HPC flows
+> remain later phases.
 
 ---
 
@@ -288,11 +293,37 @@ ccc-pack manifest show .scratch/registry/tree.toml
   gains `active_ids`/`active_count`; mountd `doctor` reports
   `active_submount_count`.
 
-**Still out:** the real pyfuse3 managed-parent/nested dispatcher binding (mount
-propagation into containers, hot-path latency gate), real writable union
-mounting, real layered compaction merge (needs a mounted union view),
-boundary-scoped auto-commit wiring and child-gen pinning, conda txn-triggered
-commit (phase-07), S3 mirroring/recall, external-HPC closure shipping
+**Phase 07 complete:**
+
+- `ccc_layered_mountd.env_txn.EnvTransaction`: managed conda env transaction
+  orchestration — acquire an exclusive per-env update lock
+  (`<nfs-root>/locks/<env>.update.lock`, deferred-Q4 = yes) → enable update mode
+  (ensure the writable overlay) → run a provided package-manager command runner →
+  on command success run a sanity check (decode smoke) → commit a new SquashFS
+  generation on success, or **preserve the dirty overlay** for inspection on
+  command/sanity failure → always release the lock (including on exceptions). A
+  second concurrent transaction gets a clear `blocked` result; the commit reuses
+  the phase-03/05 `handle_commit` seal→build→verify→publish path (the separate
+  `.commit.lock` means no deadlock), and reads of the current committed
+  generation are never blocked by an update (D-22).
+- `CommandRunner` / `SanityChecker` are injectable callables receiving an
+  `EnvUpdateContext` (env id, manifest, active-upper path, argv); the wrappers are
+  honest — they report success/commit only when the runner returns exit 0 and
+  never simulate a real package install. `pip install -e` editable markers and any
+  other writes land in the overlay and are committed on success like any other.
+- `ccc_layered_mountd.env_txn.env_status`: a clean env reports
+  `mode=read-only`/`overlay=none` (no overlay in the import path); a dirty env
+  reports `mode=update`.
+- `ccc-layered env-txn <env> -- <cmd...>` and `ccc-layered env-status <env>`:
+  node-local CLI entry points (the pm command runs on the node near the mount).
+
+**Still out:** real conda/mamba/pip package installs and the conda transparency
+bucket (hardlink/symlink survival, baked shebangs, binary relocation, real `pip
+-e` round-trip) — gated behind the FUSE/real-runtime lanes (RK-8); the real
+pyfuse3 managed-parent/nested dispatcher binding (mount propagation into
+containers, hot-path latency gate), real writable union mounting, real layered
+compaction merge (needs a mounted union view), boundary-scoped auto-commit wiring
+and child-gen pinning, S3 mirroring/recall, external-HPC closure shipping
 (phase-08), and the full privileged/FUSE/Docker CI matrix.
 
 ## License
