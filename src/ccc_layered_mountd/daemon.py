@@ -38,6 +38,8 @@ from ccc_layered_mountd.overlay import (
     ensure_active_upper,
     seal_active_upper,
 )
+from ccc_layered_mountd.workers.compaction import plan_compaction
+from ccc_layered_mountd.workers.policy import CommitPolicy, evaluate, overlay_inputs
 from ccc_layered_pack.builder import build_delta
 from ccc_layered_pack.verify import verify_pack
 
@@ -172,6 +174,13 @@ class MountdService:
             committed_status["message"] = message
             return committed_status
 
+    def handle_pin(self, selector: str, *, pinned: bool) -> dict[str, Any]:
+        manifest = self._find(selector)
+        updated = replace(manifest, pinned=pinned)
+        dump_atomic(self.manifest_paths[manifest.id], updated)
+        self.reload_registry()
+        return self._manifest_status(self.children[updated.id])
+
     def _require_parent(self) -> ManagedParent:
         if self.parent is None:
             raise MountdError("no managed parent configured on this mountd")
@@ -218,6 +227,14 @@ class MountdService:
                     result=self.handle_commit(
                         request.path,
                         message=str(request.payload.get("message", "")),
+                    ),
+                )
+            if request.command == "pin":
+                return Response(
+                    ok=True,
+                    result=self.handle_pin(
+                        request.path,
+                        pinned=bool(request.payload.get("pinned", True)),
                     ),
                 )
             if request.command == "parent-ls":
@@ -271,21 +288,36 @@ class MountdService:
         ensure_active_upper(paths)
         stats = dirty_stats(paths.active_upper)
         state = "dirty" if stats.dirty else manifest.state
+        inputs = overlay_inputs(paths.active_upper, now=time.time())
+        child_policy = replace(CommitPolicy(), mode=manifest.commit_mode or "auto")
+        decision = evaluate(child_policy, inputs)
+        comp = plan_compaction(manifest)
+        delta_count = max(0, len(manifest.pack_stack.lowers) - 1)
         return {
             "id": manifest.id,
             "name": manifest.name,
             "type": manifest.type,
             "state": state,
             "generation": manifest.generation,
+            "pinned": manifest.pinned,
             "mounted": bool(mount_status["mounted"]),
             "mountpoint": mount_status["mountpoint"],
             "refcount": mount_status["refcount"],
             "packs": [pack.to_dict() for pack in manifest.pack_stack.lowers],
+            "delta_count": delta_count,
             "overlay": {
                 "active_upper": str(paths.active_upper),
                 "dirty": stats.dirty,
                 "file_count": stats.file_count,
                 "bytes": stats.bytes,
+            },
+            "policy": {
+                "mode": manifest.commit_mode or "auto",
+                "decision": decision,
+            },
+            "compaction": {
+                "needed": comp is not None,
+                "reason": comp.reason if comp else "",
             },
         }
 

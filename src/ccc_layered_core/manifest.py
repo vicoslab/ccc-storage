@@ -166,6 +166,8 @@ class ChildManifest:
     parent_id: str = ""
     parent_path: str = ""
     created_ts: str = ""
+    pinned: bool = False
+    commit_mode: str = "auto"
     pack_stack: PackStack = field(default_factory=PackStack)
     overlay: OverlayInfo = field(default_factory=OverlayInfo)
     s3: S3Info = field(default_factory=S3Info)
@@ -186,6 +188,10 @@ class ChildManifest:
             data["parent_path"] = self.parent_path
         if self.created_ts:
             data["created_ts"] = self.created_ts
+        if self.pinned:
+            data["pinned"] = self.pinned
+        if self.commit_mode and self.commit_mode != "auto":
+            data["commit_mode"] = self.commit_mode
         data["pack_stack"] = self.pack_stack.to_dict()
         data["overlay"] = self.overlay.to_dict()
         data["s3"] = self.s3.to_dict()
@@ -213,6 +219,8 @@ class ChildManifest:
             parent_id=str(data.get("parent_id", "")),
             parent_path=str(data.get("parent_path", "")),
             created_ts=str(data.get("created_ts", "")),
+            pinned=bool(data.get("pinned", False)),
+            commit_mode=str(data.get("commit_mode", "auto")),
             pack_stack=PackStack.from_dict(data.get("pack_stack")),
             overlay=OverlayInfo.from_dict(data.get("overlay")),
             s3=S3Info.from_dict(data.get("s3")),
@@ -301,6 +309,8 @@ def _dumps_toml_subset(data: dict[str, Any]) -> str:
         "parent_id",
         "parent_path",
         "created_ts",
+        "pinned",
+        "commit_mode",
     ):
         if key in data:
             lines.append(f"{key} = {_scalar(data[key])}")

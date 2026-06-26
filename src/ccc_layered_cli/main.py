@@ -16,7 +16,6 @@ from ccc_layered_core.protocol import Request, decode_response, encode_request
 DEFAULT_SOCKET = "/run/ccc-layered/mountd.sock"
 
 _NOT_IMPLEMENTED = {
-    "pin": "phase-05",
     "import": "phase-03",
     "hpc-export": "phase-08",
 }
@@ -131,6 +130,8 @@ def _socket_command(ns: argparse.Namespace) -> int:
         payload["message"] = ns.message
     if hasattr(ns, "to"):
         payload["to"] = ns.to
+    if ns.cmd == "pin":
+        payload["pinned"] = not getattr(ns, "clear", False)
     code, result = _request(ns.cmd, path=getattr(ns, "path", ""), payload=payload)
     if code != 0:
         if getattr(ns, "json", False):
@@ -164,6 +165,18 @@ def main(argv: list[str] | None = None) -> int:
     commit.add_argument("-m", "--message", default="")
     commit.add_argument("--json", action="store_true")
     commit.set_defaults(func=_socket_command)
+
+    pin = sub.add_parser("pin", help="pin/unpin a child to exempt it from cold-tier GC")
+    pin.add_argument("path")
+    pin.add_argument(
+        "--clear",
+        "--unset",
+        dest="clear",
+        action="store_true",
+        help="clear the pin instead of setting it",
+    )
+    pin.add_argument("--json", action="store_true")
+    pin.set_defaults(func=_socket_command)
 
     list_cmd = sub.add_parser("ls", help="list managed children via mountd")
     list_cmd.add_argument("--json", action="store_true")

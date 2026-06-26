@@ -3,18 +3,21 @@
 SquashFS-backed **layered storage** for the CCC compute cluster — a monorepo of
 five independently-buildable Python packages plus a shared test harness.
 
-> **Current status — Phase 04 managed parent namespace foundation.** Phase
-> 00 created the safe dev/test harness. Phase 01 added immutable pack metadata,
-> TOML manifests, locks, checksums, and `ccc-pack`. Phase 02 added the
+> **Current status — Phase 05 auto-commit & compaction worker foundation.**
+> Phase 00 created the safe dev/test harness. Phase 01 added immutable pack
+> metadata, TOML manifests, locks, checksums, and `ccc-pack`. Phase 02 added the
 > newline-JSON control protocol, node-local `MountdService`, Unix control
 > socket, and child-mount refcounting abstraction. Phase 03 added shared-overlay
 > directory bookkeeping, dirty stats, active→sealed overlay rotation, manual
 > commit locking, delta-pack publication, and `ccc-layered commit`. Phase 04
-> adds the service-level managed-parent namespace (`list`/`create`/`rename`/
+> added the service-level managed-parent namespace (`list`/`create`/`rename`/
 > `rmdir`/lazy `access`), lock-guarded atomic child creation, lazy-mount with an
-> idle-unmount reaper, and a documented (lazily-imported) pyfuse3 dispatcher
-> placeholder. Auto-commit, S3 mirroring, and external-HPC flows remain later
-> phases.
+> idle-unmount reaper, and a documented pyfuse3 dispatcher placeholder. Phase 05
+> adds the deterministic auto-commit policy engine (D-12), the delta-pack
+> compaction planner with a safe build/publish skeleton (D-11), the conservative
+> retention/GC planner (deferred-Q7), `ccc-layered pin`, and enriched `status`
+> (dirty stats, policy decision, delta count, compaction state). S3 mirroring
+> and external-HPC flows remain later phases.
 
 ---
 
@@ -64,7 +67,7 @@ Entry points:
 |---|---|---|
 | `ccc-pack` | `ccc_layered_pack.cli:main` | implemented: `build`, `verify`, `manifest show` |
 | `ccc-layered-mountd` | `ccc_layered_mountd.daemon:main` | implemented: control socket + manifest/status/mount + managed-parent (`--managed-parent`) |
-| `ccc-layered` | `ccc_layered_cli.main:main` | implemented: `doctor`, `status`, `ls`, `mount`, `umount`, `commit`, `parent-ls`, `create`, `rename`, `rmdir`, `access` |
+| `ccc-layered` | `ccc_layered_cli.main:main` | implemented: `doctor`, `status`, `ls`, `mount`, `umount`, `commit`, `pin`, `parent-ls`, `create`, `rename`, `rmdir`, `access` |
 | `ccc-layered-hpc` | `ccc_layered_hpc.client:main` | stub (phase-08) |
 
 ---
@@ -213,6 +216,33 @@ wiring, unit tests for all of the above, and a safe CI skeleton.
 - `ccc-layered-mountd --managed-parent` plus `ccc-layered parent-ls / create /
   rename / rmdir / access` over the control socket.
 
+**Phase 05 complete:**
+
+- `ccc_layered_mountd.workers.policy`: pure, deterministic auto-commit policy
+  engine (D-12) — `CommitPolicy` thresholds (≥1 GiB after a 10-min quiet period,
+  ≥100k changed files forces a commit, weekly small-dirty cadence), a
+  `PolicyInputs` snapshot, `evaluate()` returning `trigger`/`manual`/`noop`, and
+  `overlay_inputs()` (clock-injectable dirty accounting — no hot-path scans).
+- `ccc_layered_mountd.workers.auto_commit.AutoCommitWorker`: `tick()` evaluates
+  every child and reuses `MountdService.handle_commit` for the phase-03 sealed-gen
+  commit; honors per-child manual-only mode and skips gracefully when the commit
+  lock is held (never races a manual commit). Deterministic `poke()`/`tick()`
+  hooks, no wall-clock sleeps.
+- `ccc_layered_mountd.workers.compaction`: D-11 planner (`plan_compaction`) that
+  triggers on **>8 deltas OR delta bytes >20% of base**, plus a safe
+  build→verify→publish→retire skeleton (`consolidate` requires a *materialized*
+  layered source dir; `publish_consolidation` swaps the stack and returns retired
+  packs for the GC planner). Real layered merge needs a mounted union (later).
+- `ccc_layered_mountd.workers.gc.plan_gc`: conservative retention (deferred-Q7) —
+  evicts a retired pack only with no dirty overlay, no active mount, no pending
+  commit lock, and not `pinned`; `admin_override` bypasses the mount/dirty/lock
+  predicates but never a pin (RK-9).
+- `ccc_layered_core.manifest`: backward-compatible `pinned` and `commit_mode`
+  fields (emitted only when non-default).
+- `MountdService.handle_pin` + the `pin` control command; enriched `status`
+  (`pinned`, `delta_count`, `policy` decision, `compaction` state).
+- `ccc-layered pin <child> [--clear]`.
+
 Example:
 
 ```bash
@@ -225,9 +255,10 @@ ccc-pack manifest show .scratch/registry/tree.toml
 ```
 
 **Still out:** the real pyfuse3 managed-parent dispatcher binding (mount
-propagation, hot-path latency gate), real writable union mounting, auto-commit/
-compaction workers, S3 mirroring/recall, external-HPC flows, and the full
-privileged/FUSE/Docker CI matrix.
+propagation, hot-path latency gate), real writable union mounting, real layered
+compaction merge (needs a mounted union view), hierarchy-aware boundary commit
+(phase-06), conda txn-triggered commit (phase-07), S3 mirroring/recall,
+external-HPC flows, and the full privileged/FUSE/Docker CI matrix.
 
 ## License
 
