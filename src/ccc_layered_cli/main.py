@@ -16,7 +16,6 @@ from ccc_layered_core.protocol import Request, decode_response, encode_request
 DEFAULT_SOCKET = "/run/ccc-layered/mountd.sock"
 
 _NOT_IMPLEMENTED = {
-    "commit": "phase-03",
     "pin": "phase-05",
     "import": "phase-03",
     "hpc-export": "phase-08",
@@ -124,7 +123,10 @@ def _doctor(as_json: bool = False) -> int:
 
 
 def _socket_command(ns: argparse.Namespace) -> int:
-    code, result = _request(ns.cmd, path=getattr(ns, "path", ""))
+    payload: dict[str, Any] = {}
+    if hasattr(ns, "message"):
+        payload["message"] = ns.message
+    code, result = _request(ns.cmd, path=getattr(ns, "path", ""), payload=payload)
     if code != 0:
         if getattr(ns, "json", False):
             print(json.dumps(result, indent=2, sort_keys=True))
@@ -151,6 +153,12 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("path")
         p.add_argument("--json", action="store_true")
         p.set_defaults(func=_socket_command)
+
+    commit = sub.add_parser("commit", help="commit a dirty shared overlay via mountd")
+    commit.add_argument("path")
+    commit.add_argument("-m", "--message", default="")
+    commit.add_argument("--json", action="store_true")
+    commit.set_defaults(func=_socket_command)
 
     list_cmd = sub.add_parser("ls", help="list managed children via mountd")
     list_cmd.add_argument("--json", action="store_true")

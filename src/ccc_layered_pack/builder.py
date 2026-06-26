@@ -35,6 +35,24 @@ def count_files(src: str | Path, *, exclude_boundaries: list[str] | None = None)
     return count
 
 
+def build_delta(
+    src: str | Path,
+    base_manifest: object,
+    out: str | Path,
+    tombstones: list[str] | None = None,
+    *,
+    comp: str = "zstd",
+    block: str = "1M",
+) -> BuildResult:
+    """Build a delta pack from a sealed overlay upper.
+
+    Tombstones are reserved for the later whiteout-aware implementation. Phase 03
+    records only added/modified files by packing the sealed upper as-is.
+    """
+    _ = base_manifest, tombstones
+    return build_pack(src, out, comp=comp, block=block)
+
+
 def build_pack(
     src: str | Path,
     out: str | Path,

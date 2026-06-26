@@ -3,13 +3,15 @@
 SquashFS-backed **layered storage** for the CCC compute cluster — a monorepo of
 five independently-buildable Python packages plus a shared test harness.
 
-> **Current status — Phase 02 minimal mountd/control plane.** Phase 00 created
-> the safe dev/test harness. Phase 01 added immutable pack metadata, TOML
-> manifests, locks, checksums, and `ccc-pack`. Phase 02 adds the newline-JSON
-> control protocol, node-local `MountdService`, Unix control socket,
-> child-mount refcounting abstraction, and `ccc-layered status/ls/mount/umount`
-> socket commands. Managed parent FUSE, dirty overlays, auto-commit, S3
-> mirroring, and external-HPC flows remain later phases.
+> **Current status — Phase 03 dirty overlay + manual commit foundation.** Phase
+> 00 created the safe dev/test harness. Phase 01 added immutable pack metadata,
+> TOML manifests, locks, checksums, and `ccc-pack`. Phase 02 added the
+> newline-JSON control protocol, node-local `MountdService`, Unix control
+> socket, and child-mount refcounting abstraction. Phase 03 adds shared-overlay
+> directory bookkeeping, dirty stats, active→sealed overlay rotation, manual
+> commit locking, delta-pack publication, and `ccc-layered commit`. Managed
+> parent FUSE, auto-commit, S3 mirroring, and external-HPC flows remain later
+> phases.
 
 ---
 
@@ -59,7 +61,7 @@ Entry points:
 |---|---|---|
 | `ccc-pack` | `ccc_layered_pack.cli:main` | implemented: `build`, `verify`, `manifest show` |
 | `ccc-layered-mountd` | `ccc_layered_mountd.daemon:main` | implemented: control socket + manifest/status/mount service |
-| `ccc-layered` | `ccc_layered_cli.main:main` | implemented: `doctor`, `status`, `ls`, `mount`, `umount` |
+| `ccc-layered` | `ccc_layered_cli.main:main` | implemented: `doctor`, `status`, `ls`, `mount`, `umount`, `commit` |
 | `ccc-layered-hpc` | `ccc_layered_hpc.client:main` | stub (phase-08) |
 
 ---
@@ -177,6 +179,17 @@ wiring, unit tests for all of the above, and a safe CI skeleton.
 - `ccc-layered status`, `ccc-layered ls`, `ccc-layered mount`, and
   `ccc-layered umount` over the mountd socket.
 
+**Phase 03 complete:**
+
+- `ccc_layered_mountd.overlay`: shared-NFS overlay path layout, active upper
+  creation, dirty file/byte accounting, and active→sealed rotation.
+- `ccc_layered_pack.builder.build_delta`: simple delta-pack builder for sealed
+  dirty uppers.
+- `ccc_layered_mountd.daemon.MountdService.handle_commit`: per-child commit lock,
+  dirty overlay sealing, delta build, pack verification, atomic manifest
+  generation bump, and sealed-overlay cleanup.
+- `ccc-layered commit`: control-socket command for manual commits.
+
 Example:
 
 ```bash
@@ -188,9 +201,9 @@ ccc-pack verify .scratch/packs/tree.sqfs --sha256 <hex> --size <bytes>
 ccc-pack manifest show .scratch/registry/tree.toml
 ```
 
-**Still out:** managed parent FUSE, namespace auto-registration, dirty overlays,
-auto-commit/compaction workers, S3 mirroring/recall, external-HPC flows, and the
-full privileged/FUSE/Docker CI matrix.
+**Still out:** managed parent FUSE, namespace auto-registration, real writable
+union mounting, auto-commit/compaction workers, S3 mirroring/recall,
+external-HPC flows, and the full privileged/FUSE/Docker CI matrix.
 
 ## License
 
