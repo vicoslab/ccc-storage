@@ -130,7 +130,64 @@ class ChildMountManager:
             return {"mounted": False, "refcount": 0, "mountpoint": ""}
         return record.to_dict()
 
+    def active_ids(self) -> list[str]:
+        """Ids of all currently-mounted children (including idle-but-lingering)."""
+        return [mid for mid, record in self._records.items() if record.handle.mounted]
+
+    def active_count(self) -> int:
+        return len(self.active_ids())
+
     def stop_all(self) -> None:
         for manifest_id in list(self._records):
             record = self._records.pop(manifest_id)
             record.handle.unmount()
+
+
+class NestedMountManager:
+    """Lazy nested-submount bookkeeping for one managed-parent view (Option A).
+
+    The parent pack is mounted once; each child boundary is a *nested* submount
+    that mounts lazily on first access and idle-unmounts independently while the
+    parent view stays mounted. This keeps the mount table bounded for parents
+    with many children (e.g. 100 conda envs) without mountd ever entering child
+    file I/O — the kernel/squashfuse submount serves the bytes.
+    """
+
+    def __init__(self, mounts: ChildMountManager, *, parent_id: str) -> None:
+        self._mounts = mounts
+        self._parent_id = parent_id
+        self._parent_mounted = False
+
+    def mount_parent(self, manifest: ChildManifest) -> MountRecord:
+        record = self._mounts.mount(manifest)
+        self._parent_mounted = True
+        return record
+
+    @property
+    def parent_mounted(self) -> bool:
+        return self._parent_mounted
+
+    def access_child(self, manifest: ChildManifest) -> MountRecord:
+        """Lazily mount the accessed child submount."""
+        return self._mounts.mount(manifest)
+
+    def release_child(self, child_id: str) -> dict[str, Any]:
+        return self._mounts.release(child_id)
+
+    def idle_reap(self, ttl: float, *, now: float | None = None) -> list[str]:
+        """Idle-unmount expired child submounts; the parent is never reaped here."""
+        return [
+            mid
+            for mid in self._mounts.idle_unmount_expired(ttl, now=now)
+            if mid != self._parent_id
+        ]
+
+    def is_child_mounted(self, child_id: str) -> bool:
+        return child_id in self._mounts.active_ids()
+
+    def active_ids(self) -> list[str]:
+        return [mid for mid in self._mounts.active_ids() if mid != self._parent_id]
+
+    def active_child_count(self) -> int:
+        """Active nested submount count, excluding the parent view itself."""
+        return len(self.active_ids())

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 import shutil
+from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -62,6 +63,15 @@ def _safe_name(value: str) -> str:
 def is_internal_name(name: str) -> bool:
     """True for marker/internal names that must be hidden and never created."""
     return name.startswith(".") or name in _HIDDEN_NAMES
+
+
+def visible_entries(entries: Iterable[str]) -> list[str]:
+    """Filter a directory listing to user-visible names (RK-8).
+
+    Hides internal bookkeeping and boundary-marker files (e.g. ``.ccc-boundary``)
+    while leaving normal boundary directory names (``env-a``) visible.
+    """
+    return sorted(name for name in entries if not is_internal_name(name))
 
 
 class ManagedParent:

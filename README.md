@@ -3,7 +3,7 @@
 SquashFS-backed **layered storage** for the CCC compute cluster — a monorepo of
 five independently-buildable Python packages plus a shared test harness.
 
-> **Current status — Phase 05 auto-commit & compaction worker foundation.**
+> **Current status — Phase 06 hierarchical pack boundary foundation.**
 > Phase 00 created the safe dev/test harness. Phase 01 added immutable pack
 > metadata, TOML manifests, locks, checksums, and `ccc-pack`. Phase 02 added the
 > newline-JSON control protocol, node-local `MountdService`, Unix control
@@ -16,8 +16,13 @@ five independently-buildable Python packages plus a shared test harness.
 > adds the deterministic auto-commit policy engine (D-12), the delta-pack
 > compaction planner with a safe build/publish skeleton (D-11), the conservative
 > retention/GC planner (deferred-Q7), `ccc-layered pin`, and enriched `status`
-> (dirty stats, policy decision, delta count, compaction state). S3 mirroring
-> and external-HPC flows remain later phases.
+> (dirty stats, policy decision, delta count, compaction state). Phase 06 adds the
+> hierarchical/nested pack foundation (D-13/D-14/D-15): a shared longest-prefix
+> boundary resolver, a bidirectional parent<->child `BoundaryRegistry`, parent
+> builds that exclude child subtrees and emit hidden boundary markers,
+> per-boundary overlay write-routing, lazy nested submounts with an idle reaper
+> that bounds the active-submount count, and boundary-aware commit-owner
+> resolution. S3 mirroring and external-HPC flows remain later phases.
 
 ---
 
@@ -254,11 +259,41 @@ ccc-pack verify .scratch/packs/tree.sqfs --sha256 <hex> --size <bytes>
 ccc-pack manifest show .scratch/registry/tree.toml
 ```
 
-**Still out:** the real pyfuse3 managed-parent dispatcher binding (mount
-propagation, hot-path latency gate), real writable union mounting, real layered
-compaction merge (needs a mounted union view), hierarchy-aware boundary commit
-(phase-06), conda txn-triggered commit (phase-07), S3 mirroring/recall,
-external-HPC flows, and the full privileged/FUSE/Docker CI matrix.
+**Phase 06 complete:**
+
+- `ccc_layered_core.resolve`: the shared longest-prefix boundary resolver —
+  `resolve_owner_path()` / `OwningBoundary` map an absolute/relative path to its
+  nearest owning boundary (or the parent), used identically by overlay routing,
+  commit-owner selection, and (later) HPC export. Sibling-prefix safe
+  (`conda/envs/env-a2` is *not* owned by `conda/envs/env-a`); deeper boundaries
+  win over shallower ones.
+- `ccc_layered_core.resolve.BoundaryRegistry`: bidirectional lookup built from
+  manifests — `boundaries_of(parent)`, `parent_of(child)` (`ParentRef`), and
+  `resolve_owner(parent, path)`.
+- `ccc_layered_pack.builder`: `plan_boundary_markers` / `create_boundary_markers`
+  emit navigation stubs (empty boundary dir + an internal `.ccc-boundary` marker)
+  for excluded child subtrees without copying child payload; `build_pack(...,
+  exclude_boundaries=[...])` / `count_files` keep child contents out of the parent
+  pack (no duplication — D-13).
+- `ccc_layered_mountd.managed_parent.visible_entries`: reuses `is_internal_name`
+  to hide boundary markers from listings while keeping normal boundary names
+  (`env-a`) visible (RK-8).
+- `ccc_layered_mountd.overlay.route_path` / `OverlayRoute`: a write under a child
+  boundary routes to the child's overlay; a write outside routes to the parent
+  overlay.
+- `ccc_layered_mountd.childmount.NestedMountManager`: lazy nested submounts
+  (Option A) — `access_child` mounts only the touched child, `idle_reap` unmounts
+  idle children while the parent view stays mounted, and `active_child_count`
+  bounds the active-submount count (100-boundary ceiling test). `ChildMountManager`
+  gains `active_ids`/`active_count`; mountd `doctor` reports
+  `active_submount_count`.
+
+**Still out:** the real pyfuse3 managed-parent/nested dispatcher binding (mount
+propagation into containers, hot-path latency gate), real writable union
+mounting, real layered compaction merge (needs a mounted union view),
+boundary-scoped auto-commit wiring and child-gen pinning, conda txn-triggered
+commit (phase-07), S3 mirroring/recall, external-HPC closure shipping
+(phase-08), and the full privileged/FUSE/Docker CI matrix.
 
 ## License
 

@@ -15,10 +15,49 @@ class PackBuildError(RuntimeError):
     """Raised when pack construction fails."""
 
 
+# Internal marker dropped at an excluded child-boundary path so the parent tree
+# stays navigable before the child is mounted. Hidden from user-facing listings
+# (it starts with a dot, so ``managed_parent.is_internal_name`` filters it).
+BOUNDARY_MARKER_NAME = ".ccc-boundary"
+
+
 @dataclass(frozen=True)
 class BuildResult:
     pack: PackInfo
     args: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BoundaryMarkerPlan:
+    boundary_paths: tuple[str, ...]
+    marker_files: tuple[str, ...]
+
+
+def plan_boundary_markers(boundaries: list[str] | None) -> BoundaryMarkerPlan:
+    """Plan the boundary dirs + marker files for the excluded child subtrees."""
+    paths = tuple(item.strip("/") for item in (boundaries or []) if item.strip("/"))
+    markers = tuple(f"{path}/{BOUNDARY_MARKER_NAME}" for path in paths)
+    return BoundaryMarkerPlan(boundary_paths=paths, marker_files=markers)
+
+
+def create_boundary_markers(
+    src: str | Path, boundaries: list[str] | None
+) -> list[Path]:
+    """Create empty boundary dirs + marker files under *src*.
+
+    This emits only navigation stubs (an empty dir plus an internal marker file)
+    at each child-boundary path; it never copies child payload, so the parent
+    pack stays free of duplicated child contents (D-13).
+    """
+    root = Path(src)
+    created: list[Path] = []
+    for boundary_path in plan_boundary_markers(boundaries).boundary_paths:
+        boundary_dir = root / boundary_path
+        boundary_dir.mkdir(parents=True, exist_ok=True)
+        marker = boundary_dir / BOUNDARY_MARKER_NAME
+        marker.write_text("")
+        created.append(marker)
+    return created
 
 
 def count_files(src: str | Path, *, exclude_boundaries: list[str] | None = None) -> int:

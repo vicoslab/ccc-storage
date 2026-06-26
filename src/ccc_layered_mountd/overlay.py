@@ -14,6 +14,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from ccc_layered_core.manifest import ChildManifest
+from ccc_layered_core.resolve import resolve_owner_path
+
 
 @dataclass(frozen=True)
 class OverlayPaths:
@@ -42,6 +45,37 @@ class DirtyStats:
 class SealedOverlay:
     path: Path
     generation: int
+
+
+@dataclass(frozen=True)
+class OverlayRoute:
+    """The overlay a write should land in, per the nearest owning boundary."""
+
+    owner_id: str
+    is_parent: bool
+    overlay: OverlayPaths
+    inner_path: str
+
+
+def route_path(
+    parent_manifest: ChildManifest,
+    rel_path: str,
+    overlays_root: str | Path,
+) -> OverlayRoute:
+    """Route a write at *rel_path* to the nearest owning boundary's overlay.
+
+    A write under a child boundary lands in that child's overlay; a write
+    outside every boundary lands in the parent overlay (design routing rules).
+    """
+    owner = resolve_owner_path(
+        parent_manifest.child_boundaries, rel_path, parent_id=parent_manifest.id
+    )
+    return OverlayRoute(
+        owner_id=owner.owner_id,
+        is_parent=owner.is_parent,
+        overlay=OverlayPaths.for_child(overlays_root, owner.owner_id),
+        inner_path=owner.inner_path,
+    )
 
 
 def _safe_name(value: str) -> str:

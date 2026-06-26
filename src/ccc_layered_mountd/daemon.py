@@ -208,6 +208,7 @@ class MountdService:
             "nfs_root_reachable": self.nfs_root.is_dir(),
             "registry_reachable": self.registry_dir.is_dir(),
             "child_count": len(self.children),
+            "active_submount_count": self.mounts.active_count(),
             "runtime": _probe_summary_dict(),
         }
 
