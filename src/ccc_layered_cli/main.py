@@ -82,6 +82,9 @@ def _print_result(result: dict[str, Any], *, as_json: bool) -> None:
         return
     if "children" in result:
         for child in result["children"]:
+            if isinstance(child, str):  # managed-parent name listing
+                print(child)
+                continue
             mounted = "mounted" if child.get("mounted") else "not-mounted"
             print(f"{child['id']}\tgen={child['generation']}\t{mounted}")
         return
@@ -126,6 +129,8 @@ def _socket_command(ns: argparse.Namespace) -> int:
     payload: dict[str, Any] = {}
     if hasattr(ns, "message"):
         payload["message"] = ns.message
+    if hasattr(ns, "to"):
+        payload["to"] = ns.to
     code, result = _request(ns.cmd, path=getattr(ns, "path", ""), payload=payload)
     if code != 0:
         if getattr(ns, "json", False):
@@ -163,6 +168,23 @@ def main(argv: list[str] | None = None) -> int:
     list_cmd = sub.add_parser("ls", help="list managed children via mountd")
     list_cmd.add_argument("--json", action="store_true")
     list_cmd.set_defaults(func=_socket_command)
+
+    # --- managed-parent namespace ops (phase-04) ----------------------------
+    parent_ls = sub.add_parser("parent-ls", help="list managed-parent child names")
+    parent_ls.add_argument("--json", action="store_true")
+    parent_ls.set_defaults(func=_socket_command)
+
+    for name in ("create", "rmdir", "access"):
+        p = sub.add_parser(name, help=f"{name} a managed-parent child via mountd")
+        p.add_argument("path", help="child name")
+        p.add_argument("--json", action="store_true")
+        p.set_defaults(func=_socket_command)
+
+    rename = sub.add_parser("rename", help="rename a managed-parent child via mountd")
+    rename.add_argument("path", help="current child name")
+    rename.add_argument("to", help="new child name")
+    rename.add_argument("--json", action="store_true")
+    rename.set_defaults(func=_socket_command)
 
     for name in _NOT_IMPLEMENTED:
         sub.add_parser(name, help=f"not yet implemented ({_NOT_IMPLEMENTED[name]})")

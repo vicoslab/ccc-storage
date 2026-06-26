@@ -24,6 +24,13 @@ from ccc_layered_core.protocol import Request, Response
 from ccc_layered_mountd import __version__
 from ccc_layered_mountd.childmount import ChildMountError, ChildMountManager
 from ccc_layered_mountd.control import ControlServer
+from ccc_layered_mountd.managed_parent import (
+    ChildExistsError,
+    ChildNotEmptyError,
+    ChildNotFoundError,
+    ManagedParent,
+    ManagedParentError,
+)
 from ccc_layered_mountd.overlay import (
     OverlayPaths,
     cleanup_sealed,
@@ -56,6 +63,7 @@ class MountdService:
         run_dir: str | Path,
         *,
         prefer_kernel: bool = False,
+        managed_parent: str | None = None,
     ) -> None:
         self.nfs_root = Path(nfs_root)
         self.run_dir = Path(run_dir)
@@ -63,6 +71,15 @@ class MountdService:
         self.mounts = ChildMountManager(self.run_dir, prefer_kernel=prefer_kernel)
         self.children: dict[str, ChildManifest] = {}
         self.manifest_paths: dict[str, Path] = {}
+        self.parent: ManagedParent | None = None
+        if managed_parent:
+            self.parent = ManagedParent(
+                self.nfs_root,
+                self.run_dir,
+                parent_path=managed_parent,
+                mounts=self.mounts,
+                prefer_kernel=prefer_kernel,
+            )
 
     def reload_registry(self) -> None:
         self.children.clear()
@@ -155,6 +172,26 @@ class MountdService:
             committed_status["message"] = message
             return committed_status
 
+    def _require_parent(self) -> ManagedParent:
+        if self.parent is None:
+            raise MountdError("no managed parent configured on this mountd")
+        return self.parent
+
+    def handle_parent_ls(self) -> dict[str, Any]:
+        return {"children": self._require_parent().list_children()}
+
+    def handle_create(self, name: str) -> dict[str, Any]:
+        return self._require_parent().create_child(name)
+
+    def handle_rename(self, old_name: str, new_name: str) -> dict[str, Any]:
+        return self._require_parent().rename_child(old_name, new_name)
+
+    def handle_rmdir(self, name: str) -> dict[str, Any]:
+        return self._require_parent().remove_child(name)
+
+    def handle_access(self, name: str) -> dict[str, Any]:
+        return self._require_parent().access_child(name)
+
     def handle_doctor(self) -> dict[str, Any]:
         self.reload_registry()
         return {
@@ -183,6 +220,22 @@ class MountdService:
                         message=str(request.payload.get("message", "")),
                     ),
                 )
+            if request.command == "parent-ls":
+                return Response(ok=True, result=self.handle_parent_ls())
+            if request.command == "create":
+                return Response(ok=True, result=self.handle_create(request.path))
+            if request.command == "rename":
+                return Response(
+                    ok=True,
+                    result=self.handle_rename(
+                        request.path,
+                        str(request.payload.get("to", "")),
+                    ),
+                )
+            if request.command == "rmdir":
+                return Response(ok=True, result=self.handle_rmdir(request.path))
+            if request.command == "access":
+                return Response(ok=True, result=self.handle_access(request.path))
             if request.command == "doctor":
                 return Response(ok=True, result=self.handle_doctor())
             return Response(ok=False, error=f"unknown command: {request.command}", code="EPROTO")
@@ -192,6 +245,16 @@ class MountdService:
                 error=f"managed child not found: {exc.args[0]}",
                 code="ENOENT",
             )
+        except ChildExistsError as exc:
+            return Response(ok=False, error=str(exc), code="EEXIST")
+        except ChildNotFoundError as exc:
+            return Response(ok=False, error=str(exc), code="ENOENT")
+        except ChildNotEmptyError as exc:
+            return Response(ok=False, error=str(exc), code="ENOTEMPTY")
+        except MountdError as exc:
+            return Response(ok=False, error=str(exc), code="EPROTO")
+        except ManagedParentError as exc:
+            return Response(ok=False, error=str(exc), code="EPERM")
         except PermissionError as exc:
             return Response(ok=False, error=str(exc), code="EACCES")
         except ChildMountError as exc:
@@ -280,6 +343,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--nfs-root", default=os.environ.get("CCC_NFS_ROOT", ""))
     parser.add_argument("--run-dir", default=os.environ.get("CCC_NODE_RUN_DIR", "/run/ccc-layered"))
     parser.add_argument("--socket", default=os.environ.get("CCC_MOUNTD_SOCK", ""))
+    parser.add_argument(
+        "--managed-parent",
+        default=os.environ.get("CCC_MANAGED_PARENT", ""),
+        help="managed parent path whose children this node serves (e.g. /managed/dataset)",
+    )
     parser.add_argument("--once-doctor", action="store_true", help="print doctor JSON and exit")
     ns = parser.parse_args(argv)
 
@@ -290,7 +358,11 @@ def main(argv: list[str] | None = None) -> int:
         print("ccc-layered-mountd: --nfs-root or $CCC_NFS_ROOT is required")
         return 2
 
-    service = MountdService(ns.nfs_root, ns.run_dir)
+    service = MountdService(
+        ns.nfs_root,
+        ns.run_dir,
+        managed_parent=ns.managed_parent or None,
+    )
     service.reload_registry()
     if ns.once_doctor:
         import json

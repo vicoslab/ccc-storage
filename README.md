@@ -3,14 +3,17 @@
 SquashFS-backed **layered storage** for the CCC compute cluster — a monorepo of
 five independently-buildable Python packages plus a shared test harness.
 
-> **Current status — Phase 03 dirty overlay + manual commit foundation.** Phase
+> **Current status — Phase 04 managed parent namespace foundation.** Phase
 > 00 created the safe dev/test harness. Phase 01 added immutable pack metadata,
 > TOML manifests, locks, checksums, and `ccc-pack`. Phase 02 added the
 > newline-JSON control protocol, node-local `MountdService`, Unix control
-> socket, and child-mount refcounting abstraction. Phase 03 adds shared-overlay
+> socket, and child-mount refcounting abstraction. Phase 03 added shared-overlay
 > directory bookkeeping, dirty stats, active→sealed overlay rotation, manual
-> commit locking, delta-pack publication, and `ccc-layered commit`. Managed
-> parent FUSE, auto-commit, S3 mirroring, and external-HPC flows remain later
+> commit locking, delta-pack publication, and `ccc-layered commit`. Phase 04
+> adds the service-level managed-parent namespace (`list`/`create`/`rename`/
+> `rmdir`/lazy `access`), lock-guarded atomic child creation, lazy-mount with an
+> idle-unmount reaper, and a documented (lazily-imported) pyfuse3 dispatcher
+> placeholder. Auto-commit, S3 mirroring, and external-HPC flows remain later
 > phases.
 
 ---
@@ -60,8 +63,8 @@ Entry points:
 | Command | Package | Status |
 |---|---|---|
 | `ccc-pack` | `ccc_layered_pack.cli:main` | implemented: `build`, `verify`, `manifest show` |
-| `ccc-layered-mountd` | `ccc_layered_mountd.daemon:main` | implemented: control socket + manifest/status/mount service |
-| `ccc-layered` | `ccc_layered_cli.main:main` | implemented: `doctor`, `status`, `ls`, `mount`, `umount`, `commit` |
+| `ccc-layered-mountd` | `ccc_layered_mountd.daemon:main` | implemented: control socket + manifest/status/mount + managed-parent (`--managed-parent`) |
+| `ccc-layered` | `ccc_layered_cli.main:main` | implemented: `doctor`, `status`, `ls`, `mount`, `umount`, `commit`, `parent-ls`, `create`, `rename`, `rmdir`, `access` |
 | `ccc-layered-hpc` | `ccc_layered_hpc.client:main` | stub (phase-08) |
 
 ---
@@ -190,6 +193,26 @@ wiring, unit tests for all of the above, and a safe CI skeleton.
   generation bump, and sealed-overlay cleanup.
 - `ccc-layered commit`: control-socket command for manual commits.
 
+**Phase 04 complete:**
+
+- `ccc_layered_mountd.managed_parent.ManagedParent`: pure, unit-testable
+  managed-parent namespace logic — `list_children` (hides internal/marker
+  files), lock-guarded atomic `create_child` (generation-0 child manifest +
+  initialized overlay, exactly one winner under concurrent create),
+  atomic `rename_child`, policy-guarded `remove_child` (refuses committed /
+  non-empty children with a clear `ccc-layered`-referencing error; removes only
+  empty generation-0 children), and lazy `access_child`. It is a *shallow*
+  control-plane layer only and never serves file bytes (RK-7).
+- `ccc_layered_mountd.childmount`: lazy-mount support — a `clock`-injectable
+  manager, `release` (drop a handle without unmounting), and
+  `idle_unmount_expired` (TTL reaper that never unmounts a child with refcount
+  > 0).
+- `ccc_layered_mountd.dispatcher_fuse`: documented adapter placeholder that
+  imports pyfuse3 lazily and refuses clearly (`DispatcherUnavailable`) when it
+  is unavailable or unimplemented — unit tests never require real FUSE.
+- `ccc-layered-mountd --managed-parent` plus `ccc-layered parent-ls / create /
+  rename / rmdir / access` over the control socket.
+
 Example:
 
 ```bash
@@ -201,9 +224,10 @@ ccc-pack verify .scratch/packs/tree.sqfs --sha256 <hex> --size <bytes>
 ccc-pack manifest show .scratch/registry/tree.toml
 ```
 
-**Still out:** managed parent FUSE, namespace auto-registration, real writable
-union mounting, auto-commit/compaction workers, S3 mirroring/recall,
-external-HPC flows, and the full privileged/FUSE/Docker CI matrix.
+**Still out:** the real pyfuse3 managed-parent dispatcher binding (mount
+propagation, hot-path latency gate), real writable union mounting, auto-commit/
+compaction workers, S3 mirroring/recall, external-HPC flows, and the full
+privileged/FUSE/Docker CI matrix.
 
 ## License
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -21,6 +23,7 @@ class MountRecord:
     mountpoint: Path
     handle: MountHandle
     refcount: int = 1
+    last_used: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -42,24 +45,37 @@ class ChildMountManager:
     reader once per child and tracks refcounts for explicit mount/umount calls.
     """
 
-    def __init__(self, run_dir: str | Path, *, prefer_kernel: bool = False) -> None:
+    def __init__(
+        self,
+        run_dir: str | Path,
+        *,
+        prefer_kernel: bool = False,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self.run_dir = Path(run_dir)
         self.prefer_kernel = prefer_kernel
         self.mounts_dir = self.run_dir / "mounts"
         self.mounts_dir.mkdir(parents=True, exist_ok=True)
+        self._clock = clock
         self._records: dict[str, MountRecord] = {}
 
     def mount(self, manifest: ChildManifest) -> MountRecord:
         existing = self._records.get(manifest.id)
         if existing and existing.handle.mounted:
             existing.refcount += 1
+            existing.last_used = self._clock()
             return existing
         if not manifest.pack_stack.lowers:
             raise ChildMountError(f"manifest {manifest.id} has no pack lowers")
         pack = manifest.pack_stack.lowers[-1]
         mountpoint = self.mounts_dir / _safe_name(manifest.id)
         handle = mount_ro(pack.path, mountpoint, prefer_kernel=self.prefer_kernel)
-        record = MountRecord(manifest_id=manifest.id, mountpoint=mountpoint, handle=handle)
+        record = MountRecord(
+            manifest_id=manifest.id,
+            mountpoint=mountpoint,
+            handle=handle,
+            last_used=self._clock(),
+        )
         self._records[manifest.id] = record
         return record
 
@@ -73,6 +89,40 @@ class ChildMountManager:
             self._records.pop(manifest_id, None)
             return {"mounted": False, "refcount": 0, "mountpoint": str(record.mountpoint)}
         return record.to_dict()
+
+    def release(self, manifest_id: str) -> dict[str, Any]:
+        """Drop one open handle without unmounting.
+
+        Unlike :meth:`unmount`, this never tears the mount down: a child whose
+        refcount reaches zero lingers (lazily mounted) until the idle reaper
+        decides it has been unused for long enough. This is the lazy-mount /
+        idle-unmount model the managed parent relies on.
+        """
+        record = self._records.get(manifest_id)
+        if record is None:
+            return {"mounted": False, "refcount": 0, "mountpoint": ""}
+        if record.refcount > 0:
+            record.refcount -= 1
+        record.last_used = self._clock()
+        return record.to_dict()
+
+    def idle_unmount_expired(self, ttl: float, *, now: float | None = None) -> list[str]:
+        """Unmount children idle (refcount 0) for at least *ttl* seconds.
+
+        Returns the ids actually unmounted. A child with any open handle
+        (refcount > 0) is never unmounted, regardless of age.
+        """
+        current = self._clock() if now is None else now
+        expired: list[str] = []
+        for manifest_id in list(self._records):
+            record = self._records[manifest_id]
+            if record.refcount > 0:
+                continue
+            if current - record.last_used >= ttl:
+                record.handle.unmount()
+                self._records.pop(manifest_id, None)
+                expired.append(manifest_id)
+        return expired
 
     def status(self, manifest: ChildManifest) -> dict[str, Any]:
         record = self._records.get(manifest.id)
