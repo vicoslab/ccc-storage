@@ -1,0 +1,28 @@
+# Test scratch root — ALL runtime test artifacts (packs, manifests, overlays,
+# sockets, fake-NFS, fake-S3) live here and must never be committed. The
+# isolation guard (tests/conftest.py) asserts $CCC_TEST_ROOT stays inside the
+# workspace; .scratch/ is the default.
+.scratch/
+
+# Python caches / build
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.egg
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store

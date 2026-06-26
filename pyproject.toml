@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ccc-layered-storage"
+version = "0.0.0"
+description = "CCC SquashFS-backed layered storage (monorepo of independently-buildable packages)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "CCC layered storage" }]
+# Phase-00 is scaffolding only; the importable packages have no hard runtime
+# dependencies yet. Real deps land with the phase that introduces them.
+dependencies = []
+
+[project.optional-dependencies]
+# S3 / HPC exchange (phase-08). boto3 is already present in the dev container.
+s3 = ["boto3>=1.26"]
+# Manifest (de)serialisation lands in phase-01; tomllib is stdlib on 3.11 for
+# reads, tomli-w is needed for atomic writes.
+manifest = ["tomli-w>=1.0"]
+# Developer / test tooling. The canonical, pinned set lives in environment.yml
+# (the ccc-dev conda env); this extra is a pip fallback for CI runners.
+dev = [
+  "pytest>=7",
+  "pytest-timeout>=2",
+  "pytest-cov>=4",
+  "ruff>=0.1",
+  "mypy>=1.5",
+]
+
+[project.scripts]
+ccc-pack = "ccc_layered_pack.cli:main"
+ccc-layered-mountd = "ccc_layered_mountd.daemon:main"
+ccc-layered = "ccc_layered_cli.main:main"
+ccc-layered-hpc = "ccc_layered_hpc.client:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["ccc_layered_*"]
+
+[tool.pytest.ini_options]
+# src/ makes the packages importable without an install; "." makes the
+# `tests` package (fakes, harness) importable as documented in the planning set.
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+addopts = "-q"
+# pytest-timeout: no single test may hang the suite (FUSE probes have their own
+# per-probe timeouts; this is the outer backstop).
+timeout = 120
+markers = [
+  "fuse: requires unprivileged FUSE (squashfuse / fuse-overlayfs)",
+  "kernel_mount: requires kernel mount privilege via user+mount namespaces",
+  "userns: requires user namespaces (unshare -r)",
+  "multinode: multi-node sync simulation on a shared fake-NFS",
+  "bench: performance benchmark (smoke in CI, full manually)",
+  "docker: requires a reachable Docker daemon (optional lane)",
+  "slow: slow test, excluded from the fast inner loop",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = false
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "src"

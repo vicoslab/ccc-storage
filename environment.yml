@@ -1,0 +1,45 @@
+# ccc-dev — the development & test conda environment for ccc-layered-storage.
+#
+# Create it once:
+#     mamba env create -f environment.yml      # or: conda env create -f environment.yml
+#     conda activate ccc-dev
+#
+# Documented alias name: `ccc-layered-dev`. The default name stays `ccc-dev` to
+# match every planning document; rename with `-n ccc-layered-dev` if you prefer.
+#
+# Phase-00 note on resolved binaries: phase-00 must verify that
+#   mksquashfs, unsquashfs, squashfuse, fuse-overlayfs, fusermount3
+# actually resolve on PATH inside this env. The capability probe
+# (tests/fakes/capability.py) does this at runtime and dependent tests skip with
+# a clear reason when a binary or kernel/namespace capability is missing — they
+# never silently pass. Record any conda-forge version that had to be relaxed in
+# a comment next to the pin below.
+name: ccc-dev
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  # --- pack tooling (data plane; orchestrated as subprocesses) ---
+  - squashfs-tools        # mksquashfs / unsquashfs
+  - squashfuse            # unprivileged read-only squashfs mount (FUSE)
+  - fuse-overlayfs        # unprivileged union / dirty overlay
+  # --- FUSE binding for the parent dispatcher (phase-04) ---
+  - pyfuse3               # libfuse3 async binding; fusepy/refuse is the fallback
+  # --- core libs ---
+  - tomli                 # TOML read (stdlib tomllib also available on 3.11)
+  - tomli-w               # TOML atomic write
+  - click                 # CLI framework (stubs use argparse; click arrives with real commands)
+  - zstandard             # packset bundle compression
+  - filelock              # advisory helper; NFS-safe locks use O_EXCL (see README §6)
+  # --- s3 / hpc ---
+  - boto3
+  - minio                 # local S3 server for tests (no creds, no network)
+  # --- dev / test / quality ---
+  - pytest
+  - pytest-cov
+  - pytest-timeout
+  - ruff
+  - mypy
+  - pip
+  - pip:
+      - moto[s3]          # in-process S3 fake; alternative to a minio subprocess
