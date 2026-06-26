@@ -3,12 +3,13 @@
 SquashFS-backed **layered storage** for the CCC compute cluster — a monorepo of
 five independently-buildable Python packages plus a shared test harness.
 
-> **Current status — Phase 01 pack & manifest foundation.** Phase 00 created the
-> safe dev/test harness. Phase 01 adds immutable pack metadata, TOML manifests,
-> NFS-safe lockfiles, checksums, path-boundary resolution, pack verification,
-> packset tar bundles, and the first real `ccc-pack` commands. Mountd, managed
-> parent FUSE, dirty overlays, auto-commit, S3 mirroring, and external-HPC flows
-> remain later phases.
+> **Current status — Phase 02 minimal mountd/control plane.** Phase 00 created
+> the safe dev/test harness. Phase 01 added immutable pack metadata, TOML
+> manifests, locks, checksums, and `ccc-pack`. Phase 02 adds the newline-JSON
+> control protocol, node-local `MountdService`, Unix control socket,
+> child-mount refcounting abstraction, and `ccc-layered status/ls/mount/umount`
+> socket commands. Managed parent FUSE, dirty overlays, auto-commit, S3
+> mirroring, and external-HPC flows remain later phases.
 
 ---
 
@@ -52,13 +53,13 @@ tests/
   fuse/ multinode/ bench/   capability-gated tiers (mostly empty until later phases)
 ```
 
-Entry points (all phase-00 stubs that print a planned surface / `--version`):
+Entry points:
 
 | Command | Package | Status |
 |---|---|---|
 | `ccc-pack` | `ccc_layered_pack.cli:main` | implemented: `build`, `verify`, `manifest show` |
-| `ccc-layered-mountd` | `ccc_layered_mountd.daemon:main` | stub + `--probe` (phase-02) |
-| `ccc-layered` | `ccc_layered_cli.main:main` | stub + offline `doctor` (phase-02) |
+| `ccc-layered-mountd` | `ccc_layered_mountd.daemon:main` | implemented: control socket + manifest/status/mount service |
+| `ccc-layered` | `ccc_layered_cli.main:main` | implemented: `doctor`, `status`, `ls`, `mount`, `umount` |
 | `ccc-layered-hpc` | `ccc_layered_hpc.client:main` | stub (phase-08) |
 
 ---
@@ -164,6 +165,18 @@ wiring, unit tests for all of the above, and a safe CI skeleton.
 - `ccc_layered_pack.bundle`: tar packset bundle seed for later S3/HPC transfer.
 - `ccc-pack build`, `ccc-pack verify`, and `ccc-pack manifest show`.
 
+**Phase 02 complete:**
+
+- `ccc_layered_core.protocol`: newline-delimited JSON request/response protocol.
+- `ccc_layered_mountd.control`: Unix-domain control socket server.
+- `ccc_layered_mountd.childmount`: read-only child mount lifecycle/refcounting
+  abstraction. It delegates bytes to `squashfuse`/future kernel mounts and keeps
+  mountd out of the read path.
+- `ccc_layered_mountd.daemon.MountdService`: scans NFS registry manifests,
+  reports status/ls, and handles explicit mount/umount/doctor requests.
+- `ccc-layered status`, `ccc-layered ls`, `ccc-layered mount`, and
+  `ccc-layered umount` over the mountd socket.
+
 Example:
 
 ```bash
@@ -175,9 +188,9 @@ ccc-pack verify .scratch/packs/tree.sqfs --sha256 <hex> --size <bytes>
 ccc-pack manifest show .scratch/registry/tree.toml
 ```
 
-**Still out:** mountd, managed parent FUSE, namespace auto-registration, dirty
-overlays, auto-commit/compaction workers, S3 mirroring/recall, external-HPC
-flows, and the full privileged/FUSE/Docker CI matrix.
+**Still out:** managed parent FUSE, namespace auto-registration, dirty overlays,
+auto-commit/compaction workers, S3 mirroring/recall, external-HPC flows, and the
+full privileged/FUSE/Docker CI matrix.
 
 ## License
 

@@ -29,7 +29,11 @@ ENTRIES = [
 
 @pytest.mark.parametrize("main, _version, prog", ENTRIES)
 def test_no_args_exits_zero(main, _version, prog, capsys) -> None:
-    assert main([]) == 0
+    code = main([])
+    if prog == "ccc-layered-mountd":
+        assert code == 2
+    else:
+        assert code == 0
     out = capsys.readouterr().out
     assert out  # prints *something* (help / planned surface)
 
@@ -93,9 +97,10 @@ def test_cli_doctor_reports_nfs_root(tmp_path, capsys, monkeypatch) -> None:
     assert str(tmp_path) in out
 
 
-def test_cli_subcommand_stub_exits_zero(capsys) -> None:
-    assert cli_main(["status"]) == 0
-    assert "not yet implemented" in capsys.readouterr().out.lower()
+def test_cli_status_requires_path(capsys) -> None:
+    with pytest.raises(SystemExit) as ei:
+        cli_main(["status"])
+    assert ei.value.code == 2
 
 
 def test_cli_no_subcommand_prints_help(capsys) -> None:
