@@ -49,6 +49,17 @@ ccc-layered-mountd --probe
 python -c "from tests.fakes.capability import CAPS; print(CAPS)"
 ```
 
+For a scratch-only control-plane smoke test that does not touch production
+`/storage/.ccc-layered`, run from the repository checkout:
+
+```bash
+deploy/runtime-smoke.sh
+```
+
+The script creates a temporary root under `/tmp` by default, starts a local
+`ccc-layered-mountd`, exercises `ccc-layered doctor`, `create`, and `parent-ls`,
+then removes the scratch tree.
+
 Then start against a non-production managed parent first:
 
 ```bash

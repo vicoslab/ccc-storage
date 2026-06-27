@@ -82,7 +82,7 @@ jobs:
         run: |
           python - <<'PY'
           from tests.fakes.capability import CAPS
-          if not (CAPS.dev_fuse and CAPS.fusermount and CAPS.squashfuse):
+          if not CAPS.unpriv_fuse:
               print('skip with reason: unprivileged FUSE stack unavailable on this runner')
               raise SystemExit(0)
           PY
@@ -127,7 +127,7 @@ jobs:
           python -m pip install -e '.[dev]'
       - name: Bench smoke or skip with reason
         run: |
-          if [ ! -d tests/bench ]; then
+          if [ ! -d tests/bench ] || ! find tests/bench -name 'test_*.py' -print -quit | grep -q .; then
             echo 'skip with reason: no bench tests in this phase'
             exit 0
           fi

@@ -16,6 +16,9 @@ def test_ci_workflow_has_always_on_and_conditional_lanes():
     assert "continue-on-error: true" in text
     assert "skip with reason" in text.lower()
     assert "CCC_TEST_ROOT" in text
+    assert "CAPS.squashfuse" not in text
+    assert "CAPS.unpriv_fuse" in text
+    assert "find tests/bench -name 'test_*.py'" in text
 
 
 def test_ci_enforces_core_pack_coverage_gate():
@@ -30,8 +33,9 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
     install = ROOT / "deploy" / "install.sh"
     uninstall = ROOT / "deploy" / "uninstall.sh"
     prereqs = ROOT / "deploy" / "PREREQS.md"
+    smoke = ROOT / "deploy" / "runtime-smoke.sh"
 
-    for path in (service, install, uninstall, prereqs):
+    for path in (service, install, uninstall, prereqs, smoke):
         assert path.exists(), path
 
     service_text = service.read_text()
@@ -41,7 +45,8 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
     assert "CAP_SYS_ADMIN" in service_text
     assert "/dev/fuse" in service_text
     assert "CCC_NFS_ROOT" in service_text
-    assert "CCC_MANAGED_PARENTS" in service_text
+    assert "CCC_MANAGED_PARENT" in service_text
+    assert "CCC_MANAGED_PARENTS" not in service_text
 
     install_text = install.read_text()
     assert "systemctl daemon-reload" in install_text
@@ -50,6 +55,12 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
     prereq_text = prereqs.read_text().lower()
     for phrase in ("/dev/fuse", "fusermount3", "squashfs", "overlay", "nfs"):
         assert phrase in prereq_text
+    assert "runtime-smoke.sh" in prereq_text
+
+    smoke_text = smoke.read_text()
+    assert "/storage/.ccc-layered" not in smoke_text
+    assert "ccc_layered_mountd.daemon" in smoke_text
+    assert "ccc_layered_cli.main" in smoke_text
 
 
 def test_dockerfile_is_optional_test_image_only():
