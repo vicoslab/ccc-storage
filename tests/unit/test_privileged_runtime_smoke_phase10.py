@@ -107,3 +107,15 @@ def test_container_exercises_current_runtime_data_plane():
         "ccc-layered doctor",
     ):
         assert phrase in text
+
+
+def test_runtime_smoke_remounts_committed_stack_and_reads_base_plus_delta():
+    text = HOST_SCRIPT.read_text()
+    for phrase in (
+        "post-commit-mount.json",
+        "post-commit-remount",
+        "hello.txt",
+        "client-writes",
+        "committed stack remount exposed base and delta files",
+    ):
+        assert phrase in text

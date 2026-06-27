@@ -31,14 +31,34 @@ def _manifest(tmp_path) -> ChildManifest:
     )
 
 
+def _stack_manifest(tmp_path) -> ChildManifest:
+    base = tmp_path / "base.sqfs"
+    delta = tmp_path / "delta.sqfs"
+    base.write_bytes(b"base")
+    delta.write_bytes(b"delta")
+    return ChildManifest(
+        id="dataset:foo",
+        name="foo",
+        type="dataset",
+        generation=2,
+        pack_stack=PackStack(
+            active_revision="g2",
+            lowers=(
+                PackInfo(path=str(base), sha256="b" * 64, size=4),
+                PackInfo(path=str(delta), sha256="d" * 64, size=5),
+            ),
+        ),
+    )
+
+
 def test_child_mount_manager_mounts_once_and_refcounts(monkeypatch, tmp_path):
     calls = []
 
-    def fake_mount_ro(pack, mountpoint, prefer_kernel=False):
-        calls.append((pack, mountpoint, prefer_kernel))
+    def fake_mount_stack_ro(packs, mountpoint, prefer_kernel=False):
+        calls.append((tuple(packs), mountpoint, prefer_kernel))
         return FakeHandle(mountpoint=mountpoint)
 
-    monkeypatch.setattr(childmount, "mount_ro", fake_mount_ro)
+    monkeypatch.setattr(childmount, "mount_stack_ro", fake_mount_stack_ro)
     manager = ChildMountManager(tmp_path / "run")
     manifest = _manifest(tmp_path)
 
@@ -54,3 +74,24 @@ def test_child_mount_manager_mounts_once_and_refcounts(monkeypatch, tmp_path):
     manager.unmount(manifest.id)
     assert manager.status(manifest)["mounted"] is False
     assert first.handle.unmount_calls == 1
+
+
+def test_child_mount_manager_mounts_entire_pack_stack(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_mount_stack_ro(packs, mountpoint, prefer_kernel=False):
+        calls.append((tuple(packs), mountpoint, prefer_kernel))
+        return FakeHandle(mountpoint=mountpoint)
+
+    monkeypatch.setattr(childmount, "mount_stack_ro", fake_mount_stack_ro)
+    manager = ChildMountManager(tmp_path / "run")
+    manifest = _stack_manifest(tmp_path)
+
+    manager.mount(manifest)
+
+    assert len(calls) == 1
+    mounted_packs = calls[0][0]
+    assert [pack.path for pack in mounted_packs] == [
+        manifest.pack_stack.lowers[0].path,
+        manifest.pack_stack.lowers[1].path,
+    ]

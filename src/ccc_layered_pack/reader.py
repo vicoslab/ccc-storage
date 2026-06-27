@@ -7,6 +7,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from ccc_layered_core.manifest import PackInfo
+
 
 class PackReadError(RuntimeError):
     """Raised when mounting or extracting a pack fails."""
@@ -33,6 +35,19 @@ class MountHandle:
         self.mounted = False
 
 
+@dataclass
+class StackMountHandle(MountHandle):
+    lower_handles: tuple[MountHandle, ...] = ()
+    stack_root: Path | None = None
+
+    def unmount(self) -> None:
+        super().unmount()
+        for handle in reversed(self.lower_handles):
+            handle.unmount()
+        if self.stack_root is not None:
+            shutil.rmtree(self.stack_root, ignore_errors=True)
+
+
 def mount_ro(
     pack: str | Path,
     mountpoint: str | Path,
@@ -57,6 +72,61 @@ def mount_ro(
         msg = cp.stderr.strip() or cp.stdout.strip()
         raise PackReadError(f"mount failed ({cp.returncode}): {msg}")
     return MountHandle(mountpoint=mnt, command=tuple(cmd))
+
+
+def mount_stack_ro(
+    packs: tuple[PackInfo, ...] | list[PackInfo],
+    mountpoint: str | Path,
+    *,
+    prefer_kernel: bool = False,
+) -> MountHandle:
+    """Mount a committed pack stack as one read-only view.
+
+    ``PackStack.lowers`` is stored base-first, delta-last. Overlay lowerdir order
+    is top-first, so the mounted lower directories are passed to fuse-overlayfs
+    in reverse order: latest delta first, base last.
+    """
+    if not packs:
+        raise PackReadError("cannot mount an empty pack stack")
+    if len(packs) == 1:
+        return mount_ro(packs[0].path, mountpoint, prefer_kernel=prefer_kernel)
+
+    fuse_overlayfs = shutil.which("fuse-overlayfs")
+    if not fuse_overlayfs:
+        raise PackReadError("fuse-overlayfs not found; cannot compose pack stack")
+
+    mnt = Path(mountpoint)
+    mnt.mkdir(parents=True, exist_ok=True)
+    stack_root = mnt.parent / f".{mnt.name}.stack"
+    if stack_root.exists():
+        shutil.rmtree(stack_root)
+    lowers_root = stack_root / "lowers"
+    lowers_root.mkdir(parents=True, exist_ok=True)
+
+    lower_handles: list[MountHandle] = []
+    try:
+        for idx, pack in enumerate(packs):
+            lower_mnt = lowers_root / f"{idx:04d}"
+            lower_handles.append(
+                mount_ro(pack.path, lower_mnt, prefer_kernel=prefer_kernel)
+            )
+        lowerdirs = ":".join(str(handle.mountpoint) for handle in reversed(lower_handles))
+        cmd = [fuse_overlayfs, "-o", f"lowerdir={lowerdirs}", str(mnt)]
+        cp = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if cp.returncode != 0:
+            msg = cp.stderr.strip() or cp.stdout.strip()
+            raise PackReadError(f"stack mount failed ({cp.returncode}): {msg}")
+        return StackMountHandle(
+            mountpoint=mnt,
+            command=tuple(cmd),
+            lower_handles=tuple(lower_handles),
+            stack_root=stack_root,
+        )
+    except Exception:
+        for handle in reversed(lower_handles):
+            handle.unmount()
+        shutil.rmtree(stack_root, ignore_errors=True)
+        raise
 
 
 def extract(pack: str | Path, dest: str | Path, *, subpath: str | None = None) -> None:

@@ -186,7 +186,7 @@ def test_rmdir_missing_child_raises_not_found(fake_nfs, tmp_path):
 
 
 def test_access_lazy_mounts_via_childmount_manager(fake_nfs, tmp_path, monkeypatch):
-    monkeypatch.setattr(childmount, "mount_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
+    monkeypatch.setattr(childmount, "mount_stack_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
     mounts = ChildMountManager(tmp_path / "run")
     mp = _parent(fake_nfs, tmp_path, mounts=mounts)
 

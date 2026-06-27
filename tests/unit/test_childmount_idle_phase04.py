@@ -43,7 +43,7 @@ def _manifest(tmp_path) -> ChildManifest:
 
 
 def test_idle_unmount_never_unmounts_while_refcount_positive(monkeypatch, tmp_path):
-    monkeypatch.setattr(childmount, "mount_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
+    monkeypatch.setattr(childmount, "mount_stack_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
     clock = FakeClock()
     manager = ChildMountManager(tmp_path / "run", clock=clock)
     manifest = _manifest(tmp_path)
@@ -57,7 +57,7 @@ def test_idle_unmount_never_unmounts_while_refcount_positive(monkeypatch, tmp_pa
 
 
 def test_idle_unmount_expires_only_after_ttl_at_refcount_zero(monkeypatch, tmp_path):
-    monkeypatch.setattr(childmount, "mount_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
+    monkeypatch.setattr(childmount, "mount_stack_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
     clock = FakeClock()
     manager = ChildMountManager(tmp_path / "run", clock=clock)
     manifest = _manifest(tmp_path)
@@ -84,7 +84,7 @@ def test_idle_unmount_expires_only_after_ttl_at_refcount_zero(monkeypatch, tmp_p
 
 
 def test_release_refcount_floor_does_not_go_negative(monkeypatch, tmp_path):
-    monkeypatch.setattr(childmount, "mount_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
+    monkeypatch.setattr(childmount, "mount_stack_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
     manager = ChildMountManager(tmp_path / "run")
     manifest = _manifest(tmp_path)
 

@@ -157,7 +157,9 @@ use the CCC FUSE sidecar path; instead it starts `ccc-layered-mountd` inside the
 privileged container, mounts a SquashFS child pack, creates a writable
 `fuse-overlayfs` view over the shared overlay upper, bind-publishes that view
 through a `rshared` Docker bind, asks existing client containers to read/write
-the published path, and commits the dirty overlay into a delta pack.
+the published path, commits the dirty overlay into a delta pack, then unmounts
+and remounts the committed child stack to prove the transparent read-only view
+contains both original base-pack files and newly committed delta-pack files.
 
 By default the script isolates state under:
 

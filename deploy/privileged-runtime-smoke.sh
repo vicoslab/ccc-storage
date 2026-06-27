@@ -371,4 +371,35 @@ if ! find "$run_root/nfs/packs/$SAFE_CHILD_ID" -name 'delta-g*.sqfs' -type f -pr
   exit 1
 fi
 
+"$docker_bin" exec "$container_name" sh -lc \
+  "set -eu
+   export CCC_NFS_ROOT='$NFS_ROOT' CCC_MOUNTD_SOCK='$MOUNTD_SOCKET'
+   ccc-layered umount '$CHILD_ID' --json >/ccc-runtime/post-commit-umount.json || true
+   ccc-layered mount '$CHILD_ID' --json >/ccc-runtime/post-commit-mount.json
+   python - /ccc-runtime/post-commit-mount.json <<'PY'
+import json
+import sys
+from pathlib import Path
+
+mount = json.loads(Path(sys.argv[1]).read_text())
+mountpoint = Path(mount.get('mountpoint', ''))
+if not mountpoint:
+    raise SystemExit('post-commit-remount did not return a mountpoint')
+base = mountpoint / 'hello.txt'
+if base.read_text() != 'hello from privileged no-sidecar runtime smoke\n':
+    raise SystemExit(f'post-commit-remount base file mismatch: {base}')
+write_dir = mountpoint / 'client-writes'
+if not write_dir.is_dir():
+    raise SystemExit('post-commit-remount did not expose client-writes delta directory')
+written = sorted(path for path in write_dir.glob('*.txt') if path.is_file())
+if not written:
+    raise SystemExit('post-commit-remount did not expose any delta write files')
+for path in written:
+    text = path.read_text()
+    if 'client write from ' not in text and 'fallback write without external client' not in text:
+        raise SystemExit(f'unexpected post-commit-remount delta payload in {path}: {text!r}')
+PY
+  "
+
+echo "committed stack remount exposed base and delta files"
 echo "privileged no-sidecar Docker runtime smoke passed"

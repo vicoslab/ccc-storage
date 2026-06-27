@@ -49,17 +49,17 @@ def test_mountd_service_mount_and_umount_delegate_to_childmount(monkeypatch, fak
             calls.append("unmount")
             self.mounted = False
 
-    def fake_mount_ro(pack, mountpoint, prefer_kernel=False):
-        calls.append((pack, mountpoint))
+    def fake_mount_stack_ro(packs, mountpoint, prefer_kernel=False):
+        calls.append((tuple(packs), mountpoint))
         return FakeHandle(mountpoint)
 
-    monkeypatch.setattr(childmount, "mount_ro", fake_mount_ro)
+    monkeypatch.setattr(childmount, "mount_stack_ro", fake_mount_stack_ro)
     service = MountdService(nfs_root=fake_nfs.ccc_layered, run_dir=tmp_path / "run")
     service.reload_registry()
 
     mounted = service.handle_mount(manifest.id)
     assert mounted["mounted"] is True
-    assert calls and calls[0][0] == manifest.pack_stack.lowers[0].path
+    assert calls and calls[0][0][0].path == manifest.pack_stack.lowers[0].path
 
     unmounted = service.handle_umount(manifest.id)
     assert unmounted["mounted"] is False

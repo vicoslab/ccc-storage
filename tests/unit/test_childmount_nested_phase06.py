@@ -40,7 +40,7 @@ def _child(tmp_path, name: str) -> ChildManifest:
 
 
 def test_nested_access_mounts_only_accessed_child(monkeypatch, tmp_path):
-    monkeypatch.setattr(childmount, "mount_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
+    monkeypatch.setattr(childmount, "mount_stack_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
     nested = NestedMountManager(ChildMountManager(tmp_path / "run"), parent_id="root")
 
     nested.access_child(_child(tmp_path, "env-a"))
@@ -51,7 +51,7 @@ def test_nested_access_mounts_only_accessed_child(monkeypatch, tmp_path):
 
 
 def test_idle_unmount_child_leaves_parent_mounted(monkeypatch, tmp_path):
-    monkeypatch.setattr(childmount, "mount_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
+    monkeypatch.setattr(childmount, "mount_stack_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
     clock = FakeClock()
     mounts = ChildMountManager(tmp_path / "run", clock=clock)
     nested = NestedMountManager(mounts, parent_id="env:root")
@@ -69,7 +69,7 @@ def test_idle_unmount_child_leaves_parent_mounted(monkeypatch, tmp_path):
 
 
 def test_mount_count_ceiling_lazy_access_plus_idle_reaper(monkeypatch, tmp_path):
-    monkeypatch.setattr(childmount, "mount_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
+    monkeypatch.setattr(childmount, "mount_stack_ro", lambda *a, **k: FakeHandle(mountpoint=a[1]))
     clock = FakeClock()
     mounts = ChildMountManager(tmp_path / "run", clock=clock)
     nested = NestedMountManager(mounts, parent_id="root")

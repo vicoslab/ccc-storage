@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ccc_layered_core.manifest import ChildManifest
-from ccc_layered_pack.reader import MountHandle, mount_ro
+from ccc_layered_pack.reader import MountHandle, mount_stack_ro
 
 
 class ChildMountError(RuntimeError):
@@ -67,9 +67,12 @@ class ChildMountManager:
             return existing
         if not manifest.pack_stack.lowers:
             raise ChildMountError(f"manifest {manifest.id} has no pack lowers")
-        pack = manifest.pack_stack.lowers[-1]
         mountpoint = self.mounts_dir / _safe_name(manifest.id)
-        handle = mount_ro(pack.path, mountpoint, prefer_kernel=self.prefer_kernel)
+        handle = mount_stack_ro(
+            manifest.pack_stack.lowers,
+            mountpoint,
+            prefer_kernel=self.prefer_kernel,
+        )
         record = MountRecord(
             manifest_id=manifest.id,
             mountpoint=mountpoint,
