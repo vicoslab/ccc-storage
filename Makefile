@@ -50,7 +50,11 @@ test-all:
 	$(PYTEST) tests -q -m "not docker"
 
 bench:
-	$(PYTEST) tests/bench -q -m bench
+	@if [ ! -d tests/bench ] || ! find tests/bench -name 'test_*.py' -print -quit | grep -q .; then \
+		echo "skip with reason: no bench tests in this phase"; \
+	else \
+		$(PYTEST) tests/bench -q -m bench; \
+	fi
 
 probe:
 	$(PYTHON) -c "from tests.fakes.capability import CAPS; import dataclasses, json; print(json.dumps(dataclasses.asdict(CAPS), indent=2))"
