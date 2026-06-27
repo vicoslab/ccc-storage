@@ -60,6 +60,7 @@ def test_client_container_checks_use_docker_exec_and_default_container():
     assert "CCC_CLIENT_CONTAINERS:-domen-cuda10" in text
     assert "docker_bin\" exec -i \"$container_name\"" in text
     assert "client_exec_script" in text
+    assert "command -v python3" in text
     assert "client-writes" in text
 
 

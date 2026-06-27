@@ -16,7 +16,16 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 docker_bin="${DOCKER:-docker}"
-python_bin="${PYTHON:-python}"
+python_bin="${PYTHON:-}"
+if [ -z "$python_bin" ]; then
+  if command -v python >/dev/null 2>&1; then
+    python_bin="python"
+  elif command -v python3 >/dev/null 2>&1; then
+    python_bin="python3"
+  else
+    python_bin="python"
+  fi
+fi
 tag="${CCC_DOCKER_TAG:-ccc-layered-storage:priv-runtime-local}"
 runtime_root_input="${CCC_RUNTIME_ROOT:-/storage/user/ccc-layered-storage-runtime-test}"
 client_containers="${CCC_CLIENT_CONTAINERS:-domen-cuda10}"
