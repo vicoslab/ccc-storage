@@ -1,10 +1,3 @@
-# Phase-00 CI skeleton — always-green, safe by construction.
-#
-# This lane needs NO Docker, NO privilege, NO real /storage, and NO network
-# beyond installing the Python toolchain. It runs lint (ruff + mypy) and the
-# unit tier only. The privileged / FUSE / kernel-mount / Docker / S3 lanes are
-# stubbed below as `if:`-gated no-ops to be filled in by phase-09.
-
 name: ci
 
 on:
@@ -13,7 +6,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Cancel superseded runs on the same ref to save CI minutes.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -22,66 +14,181 @@ permissions:
   contents: read
 
 jobs:
-  lint-and-unit:
-    name: lint + unit (no Docker, no privilege)
+  lint:
+    name: lint (ruff + mypy)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CCC_TEST_ROOT: ${{ github.workspace }}/.scratch/ci
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-
-      # Pip fallback toolchain. The canonical, pinned env is the ccc-dev conda
-      # env (environment.yml); CI uses the lightweight pip `dev` extra. moto is
-      # intentionally absent here — fake-S3 tests skip gracefully without it.
-      - name: Install (pip dev extra)
+      - name: Install pip dev extra
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e '.[dev]'
-
-      - name: Ruff (lint)
+      - name: Ruff
         run: python -m ruff check src tests
-
-      - name: Mypy (types)
+      - name: Mypy
         run: python -m mypy src
 
-      - name: Capability probe (informational)
+  unit:
+    name: unit + core/pack coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CCC_TEST_ROOT: ${{ github.workspace }}/.scratch/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install pip dev extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+      - name: Capability probe
         run: python -c "from tests.fakes.capability import CAPS; print(CAPS)"
-
-      - name: Pytest (unit tier only)
-        run: python -m pytest tests/unit -q
-
-  # ---------------------------------------------------------------------------
-  # Stubbed future lanes (phase-09). They never run today: each is gated on a
-  # condition that is false on GitHub-hosted runners, so the workflow stays
-  # green while documenting where the real jobs will go. Do NOT enable these
-  # before phase-09 wires up the matching runners/capabilities.
-  # ---------------------------------------------------------------------------
+      - name: Unit tests with coverage gate
+        run: >-
+          python -m pytest tests/unit
+          --cov=src/ccc_layered_core
+          --cov=src/ccc_layered_pack
+          --cov-report=term-missing
+          --cov-fail-under=85
 
   fuse-unpriv:
-    name: "[stub] unprivileged FUSE tier (phase-09)"
+    name: unprivileged FUSE tier (skip with reason when absent)
     runs-on: ubuntu-latest
-    needs: lint-and-unit
-    if: ${{ vars.CCC_ENABLE_FUSE_LANE == 'true' }}
+    needs: [lint, unit]
+    timeout-minutes: 20
+    env:
+      CCC_TEST_ROOT: ${{ github.workspace }}/.scratch/ci-fuse
     steps:
-      - run: echo "Unprivileged FUSE tier is filled in by phase-09."
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install pip dev extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+      - name: Run FUSE tier or skip with reason
+        run: |
+          python - <<'PY'
+          from tests.fakes.capability import CAPS
+          if not (CAPS.dev_fuse and CAPS.fusermount and CAPS.squashfuse):
+              print('skip with reason: unprivileged FUSE stack unavailable on this runner')
+              raise SystemExit(0)
+          PY
+          python -m pytest tests/unit tests/fuse -q -m "not kernel_mount and not docker"
+
+  multinode:
+    name: multinode fake-NFS harness
+    runs-on: ubuntu-latest
+    needs: [lint, unit]
+    timeout-minutes: 20
+    env:
+      CCC_TEST_ROOT: ${{ github.workspace }}/.scratch/ci-multinode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install pip dev extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+      - name: Multinode tests
+        run: python -m pytest tests/unit tests/multinode -q
+
+  bench-smoke:
+    name: benchmark smoke tier
+    runs-on: ubuntu-latest
+    needs: [lint, unit]
+    timeout-minutes: 10
+    env:
+      CCC_TEST_ROOT: ${{ github.workspace }}/.scratch/ci-bench
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install pip dev extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+      - name: Bench smoke or skip with reason
+        run: |
+          if [ ! -d tests/bench ]; then
+            echo 'skip with reason: no bench tests in this phase'
+            exit 0
+          fi
+          python -m pytest tests/bench -q -m bench
 
   kernel-mount:
-    name: "[stub] kernel-mount tier via user+mount ns (phase-09)"
+    name: conditional kernel-mount tier
     runs-on: ubuntu-latest
-    needs: lint-and-unit
-    if: ${{ vars.CCC_ENABLE_KERNEL_LANE == 'true' }}
+    needs: [lint, unit]
+    continue-on-error: true
+    timeout-minutes: 15
+    env:
+      CCC_TEST_ROOT: ${{ github.workspace }}/.scratch/ci-kernel
     steps:
-      - run: echo "Kernel-mount (unshare -rm) tier is filled in by phase-09."
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install pip dev extra
+        run: python -m pip install -e '.[dev]'
+      - name: Kernel mount lane or skip with reason
+        run: |
+          if ! unshare -r true >/dev/null 2>&1; then
+            echo 'skip with reason: user namespaces unavailable for kernel-mount lane'
+            exit 0
+          fi
+          python -m pytest tests/fuse -q -m kernel_mount
 
   docker-propagation:
-    name: "[stub] Docker mount-propagation lane (phase-09)"
+    name: conditional Docker propagation lane
     runs-on: ubuntu-latest
-    needs: lint-and-unit
-    if: ${{ vars.CCC_ENABLE_DOCKER_LANE == 'true' }}
+    needs: [lint, unit]
+    continue-on-error: true
+    timeout-minutes: 15
+    env:
+      CCC_TEST_ROOT: ${{ github.workspace }}/.scratch/ci-docker
     steps:
-      - run: echo "Docker propagation lane is filled in by phase-09."
+      - uses: actions/checkout@v4
+      - name: Docker lane or skip with reason
+        run: |
+          if ! docker info >/dev/null 2>&1; then
+            echo 'skip with reason: Docker daemon unavailable'
+            exit 0
+          fi
+          docker build -t ccc-layered-storage:test .
+
+  real-s3:
+    name: conditional real-S3 lane
+    runs-on: ubuntu-latest
+    needs: [lint, unit]
+    continue-on-error: true
+    timeout-minutes: 15
+    env:
+      CCC_TEST_ROOT: ${{ github.workspace }}/.scratch/ci-s3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Real S3 lane or skip with reason
+        run: |
+          if [ -z "${CCC_REAL_S3_BUCKET:-}" ]; then
+            echo 'skip with reason: CCC_REAL_S3_BUCKET not configured'
+            exit 0
+          fi
+          echo 'real S3 smoke would run here against configured credentials'

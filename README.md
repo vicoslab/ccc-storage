@@ -3,7 +3,7 @@
 SquashFS-backed **layered storage** for the CCC compute cluster — a monorepo of
 five independently-buildable Python packages plus a shared test harness.
 
-> **Current status — Phase 08 S3/HPC exchange foundation.**
+> **Current status — Phase 09 CI/deploy foundation.**
 > Phase 00 created the safe dev/test harness. Phase 01 added immutable pack
 > metadata, TOML manifests, locks, checksums, and `ccc-pack`. Phase 02 added the
 > newline-JSON control protocol, node-local `MountdService`, Unix control
@@ -31,7 +31,10 @@ five independently-buildable Python packages plus a shared test harness.
 > bundles with mount graphs/checksums, minimal closure computation with explicit
 > excluded-child stubs, a staged HPC client lookup model, and review-branch import
 > queue / mocked HPC-run orchestration. Real S3/SSH/SLURM/FUSE runtime adapters
-> remain later phases.
+> remain later phases. Phase 09 adds the full CI matrix skeleton, coverage gate,
+> skip-with-reason conditional lanes, optional test Dockerfile, and safe host
+> deployment artifacts (`deploy/ccc-layered-mountd.service`, install/uninstall,
+> node prerequisites).
 
 ---
 
@@ -343,6 +346,27 @@ ccc-pack manifest show .scratch/registry/tree.toml
   a packset, submits through a fake transport, collects an output delta, and
   lands it in the review queue.
 
+**Phase 09 complete:**
+
+- `.github/workflows/ci.yml`: split always-on lanes (`lint`, `unit`,
+  `fuse-unpriv`, `multinode`, `bench-smoke`) plus conditional lanes
+  (`kernel-mount`, `docker-propagation`, `real-s3`) that skip with an explicit
+  reason when capabilities/credentials are absent. The unit lane sets
+  `$CCC_TEST_ROOT` inside the runner workspace and enforces a core+pack coverage
+  gate (`--cov-fail-under=85`).
+- `deploy/ccc-layered-mountd.service`: host-level systemd unit template with
+  `/dev/fuse`, `CAP_SYS_ADMIN`, `Restart=on-failure`, managed-parent env vars,
+  and runtime directory setup.
+- `deploy/install.sh` / `deploy/uninstall.sh`: copy/remove/reload helpers with
+  safe defaults — install does **not** auto-enable or auto-start the daemon.
+- `deploy/PREREQS.md`: node prerequisites, degraded modes, preflight, and
+  rollback notes.
+- `Dockerfile`: optional dev/test image that runs `make test`; Docker remains a
+  conditional lane, not a required development dependency.
+- Phase-09 tests assert workflow structure, skip-with-reason lanes, coverage gate
+  text, deploy artifacts, optional Dockerfile semantics, and `--version` on all
+  entry points.
+
 **Still out:** real conda/mamba/pip package installs and the conda transparency
 bucket (hardlink/symlink survival, baked shebangs, binary relocation, real `pip
 -e` round-trip) — gated behind the FUSE/real-runtime lanes (RK-8); the real
@@ -350,7 +374,7 @@ pyfuse3 managed-parent/nested dispatcher binding (mount propagation into
 containers, hot-path latency gate), real writable union mounting, real layered
 compaction merge (needs a mounted union view), boundary-scoped auto-commit wiring
 and child-gen pinning, real S3 backend wiring, real SSH/SLURM/HPC FUSE runtime
-adapters, and the full privileged/FUSE/Docker CI matrix.
+adapters, and live privileged/FUSE/Docker/multinode deployment validation.
 
 ## License
 
