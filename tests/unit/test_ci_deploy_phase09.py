@@ -34,8 +34,10 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
     uninstall = ROOT / "deploy" / "uninstall.sh"
     prereqs = ROOT / "deploy" / "PREREQS.md"
     smoke = ROOT / "deploy" / "runtime-smoke.sh"
+    fuse_smoke = ROOT / "deploy" / "fuse-smoke.sh"
+    docker_smoke = ROOT / "deploy" / "docker-smoke.sh"
 
-    for path in (service, install, uninstall, prereqs, smoke):
+    for path in (service, install, uninstall, prereqs, smoke, fuse_smoke, docker_smoke):
         assert path.exists(), path
 
     service_text = service.read_text()
@@ -56,15 +58,40 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
     for phrase in ("/dev/fuse", "fusermount3", "squashfs", "overlay", "nfs"):
         assert phrase in prereq_text
     assert "runtime-smoke.sh" in prereq_text
+    assert "fuse-smoke.sh" in prereq_text
+    assert "docker-smoke.sh" in prereq_text
+    assert "ccc_allow_fuse_skip" in prereq_text
 
     smoke_text = smoke.read_text()
     assert "/storage/.ccc-layered" not in smoke_text
     assert "ccc_layered_mountd.daemon" in smoke_text
     assert "ccc_layered_cli.main" in smoke_text
 
+    fuse_text = fuse_smoke.read_text()
+    assert "/storage/.ccc-layered" not in fuse_text
+    assert "ccc_layered_pack.cli build" in fuse_text
+    assert "ccc_layered_pack.cli verify" in fuse_text
+    assert "unsquashfs" in fuse_text
+    assert "squashfuse" in fuse_text
+    assert "CCC_ALLOW_FUSE_SKIP" in fuse_text
+    assert "skip with reason" in fuse_text
+
+    docker_text = docker_smoke.read_text()
+    assert "/storage/.ccc-layered" not in docker_text
+    assert "docker" in docker_text
+    assert "--device /dev/fuse" in docker_text
+    assert "--cap-add SYS_ADMIN" in docker_text
+    assert "--security-opt apparmor=unconfined" in docker_text
+    assert "deploy/runtime-smoke.sh" in docker_text
+    assert "deploy/fuse-smoke.sh" in docker_text
+
 
 def test_dockerfile_is_optional_test_image_only():
     text = (ROOT / "Dockerfile").read_text()
     assert "ccc-layered-storage" in text
     assert "make test" in text
+    assert "COPY deploy ./deploy" in text
+    assert "squashfs-tools" in text
+    assert "squashfuse" in text
+    assert "fuse3" in text
     assert "production" not in text.lower()

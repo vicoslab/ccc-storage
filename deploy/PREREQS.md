@@ -60,6 +60,31 @@ The script creates a temporary root under `/tmp` by default, starts a local
 `ccc-layered-mountd`, exercises `ccc-layered doctor`, `create`, and `parent-ls`,
 then removes the scratch tree.
 
+For real SquashFS build/verify/extract plus an unprivileged FUSE mount check,
+run:
+
+```bash
+deploy/fuse-smoke.sh
+```
+
+This also uses `/tmp` by default. `CCC_SMOKE_ROOT` may point under `/tmp` or
+inside the repository checkout, but the script refuses other roots. If
+unprivileged FUSE is unavailable and you still want build/verify/extract
+coverage, set `CCC_ALLOW_FUSE_SKIP=1`; the mount step will print
+`skip with reason` and exit successfully.
+
+For a local Docker validation image that does not push anything and uses only
+scratch container storage, run:
+
+```bash
+deploy/docker-smoke.sh
+```
+
+It builds the repository `Dockerfile` with a local tag, then runs unit tests,
+`deploy/runtime-smoke.sh`, and `deploy/fuse-smoke.sh` inside one smoke
+container. `/dev/fuse`, `CAP_SYS_ADMIN`, and the AppArmor mount relaxation are
+passed only to that container.
+
 Then start against a non-production managed parent first:
 
 ```bash

@@ -5,9 +5,18 @@ LABEL org.opencontainers.image.description="Optional dev/test image for CCC laye
 
 WORKDIR /workspace/ccc-layered-storage
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        fuse-overlayfs \
+        fuse3 \
+        squashfs-tools \
+        squashfuse \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY tests ./tests
+COPY deploy ./deploy
 COPY Makefile ./
 
 RUN python -m pip install --upgrade pip \
