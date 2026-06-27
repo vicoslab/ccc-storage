@@ -74,6 +74,8 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
     assert "unsquashfs" in fuse_text
     assert "squashfuse" in fuse_text
     assert "CCC_ALLOW_FUSE_SKIP" in fuse_text
+    assert "ccc-fuse-sidecar" in fuse_text or "fusermount3 sidecar" in fuse_text
+    assert ".scratch/ccc-layered-fuse-smoke" in fuse_text
     assert "skip with reason" in fuse_text
 
     docker_text = docker_smoke.read_text()
@@ -91,7 +93,10 @@ def test_dockerfile_is_optional_test_image_only():
     assert "ccc-layered-storage" in text
     assert "make test" in text
     assert "COPY deploy ./deploy" in text
+    assert "COPY .github ./.github" in text
+    assert "Dockerfile ./" in text
     assert "squashfs-tools" in text
     assert "squashfuse" in text
     assert "fuse3" in text
+    assert "make" in text
     assert "production" not in text.lower()

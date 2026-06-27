@@ -9,11 +9,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         fuse-overlayfs \
         fuse3 \
+        make \
         squashfs-tools \
         squashfuse \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md Dockerfile ./
+COPY .github ./.github
 COPY src ./src
 COPY tests ./tests
 COPY deploy ./deploy

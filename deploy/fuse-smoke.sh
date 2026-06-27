@@ -4,7 +4,11 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 python_bin="${PYTHON:-python}"
 
-default_root="${TMPDIR:-/tmp}/ccc-layered-fuse-smoke.$$"
+# Default inside the repo so CCC's fusermount3 sidecar shim sees the mountpoint
+# under the container's shared workspace bind. Plain hosts may still override
+# CCC_SMOKE_ROOT=/tmp/ccc-layered-fuse-smoke.$$ if their normal fusermount3
+# permits /tmp mountpoints.
+default_root="$repo_root/.scratch/ccc-layered-fuse-smoke.$$"
 smoke_root="${CCC_SMOKE_ROOT:-$default_root}"
 
 resolve_path() {

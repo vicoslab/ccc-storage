@@ -67,11 +67,14 @@ run:
 deploy/fuse-smoke.sh
 ```
 
-This also uses `/tmp` by default. `CCC_SMOKE_ROOT` may point under `/tmp` or
-inside the repository checkout, but the script refuses other roots. If
-unprivileged FUSE is unavailable and you still want build/verify/extract
-coverage, set `CCC_ALLOW_FUSE_SKIP=1`; the mount step will print
-`skip with reason` and exit successfully.
+This uses a git-ignored repo-local `.scratch/` root by default so CCC's
+`fusermount3` sidecar shim sees the mountpoint under the container's shared
+workspace bind. `CCC_SMOKE_ROOT` may point under `/tmp` or inside the repository
+checkout, but the script refuses other roots. On plain hosts with a normal
+`fusermount3`, `/tmp` is fine; in CCC containers prefer the default repo-local
+scratch path. If unprivileged FUSE is unavailable and you still want
+build/verify/extract coverage, set `CCC_ALLOW_FUSE_SKIP=1`; the mount step will
+print `skip with reason` and exit successfully.
 
 For a local Docker validation image that does not push anything and uses only
 scratch container storage, run:
