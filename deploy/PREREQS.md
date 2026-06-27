@@ -88,6 +88,45 @@ It builds the repository `Dockerfile` with a local tag, then runs unit tests,
 container. `/dev/fuse`, `CAP_SYS_ADMIN`, and the AppArmor mount relaxation are
 passed only to that container.
 
+## Privileged no-sidecar Docker runtime smoke
+
+For an actual Docker runtime check where mount authority is fully inside one
+privileged Docker container, run:
+
+```bash
+CCC_CLIENT_CONTAINERS=domen-cuda10 deploy/privileged-runtime-smoke.sh
+```
+
+This smoke is intentionally privileged and intentionally no-sidecar. It does not
+use the CCC FUSE sidecar path; instead it starts `ccc-layered-mountd` inside the
+privileged container, mounts a SquashFS child pack, creates a writable
+`fuse-overlayfs` view over the shared overlay upper, bind-publishes that view
+through a `rshared` Docker bind, asks existing client containers to read/write
+the published path, and commits the dirty overlay into a delta pack.
+
+By default the script isolates state under:
+
+```text
+/storage/user/ccc-layered-storage-runtime-test/runs/<hostname>-<timestamp>-<pid>
+```
+
+`CCC_RUNTIME_ROOT` may point under `/storage/user/*`, `/tmp/*`, or this
+checkout's `.scratch/*`; broad roots such as `/`, `/storage`, `/storage/user`,
+`/storage/datasets`, `/storage/group`, and `/home` are refused. Set
+`CCC_RUNTIME_KEEP=1` to retain the per-run directory for inspection.
+
+For a manual multi-node pass, run the same command from each target node, for
+example:
+
+```bash
+for node in donbot morbo calculon crushinator flexo kif zapp; do
+  ssh "$node" 'cd /path/to/ccc-layered-storage && CCC_CLIENT_CONTAINERS=domen-cuda10 deploy/privileged-runtime-smoke.sh'
+done
+```
+
+This is a manual privileged runtime smoke; it is not part of the default
+non-privileged validation lane.
+
 Then start against a non-production managed parent first:
 
 ```bash
