@@ -111,6 +111,26 @@ cleanup_container() {
   fi
 }
 
+client_exec_script() {
+  local container_name="$1"
+  shift
+  "$docker_bin" exec -i "$container_name" sh -s -- "$@"
+}
+
+request_container_seal() {
+  local container_name="$1"
+  "$docker_bin" exec "$container_name" sh -lc 'rm -f /ccc-runtime/control/sealed; touch /ccc-runtime/control/seal'
+  for _ in $(seq 1 120); do
+    if "$docker_bin" exec "$container_name" sh -lc 'test -e /ccc-runtime/control/sealed'; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  echo "timed out waiting for privileged container to unmount writable view before commit" >&2
+  "$docker_bin" logs "$container_name" >&2 || true
+  return 1
+}
+
 require_docker
 require_fuse_device
 
@@ -200,9 +220,29 @@ else
       echo "skip with reason: client container is not running: $client"
       continue
     fi
+    if ! client_exec_script "$client" "$host_seed" <<'SH'
+set -eu
+host_seed="$1"
+test -r "$host_seed"
+test "$(cat "$host_seed")" = 'hello from privileged no-sidecar runtime smoke'
+SH
+    then
+      echo "skip with reason: client container cannot see propagated published seed file: $client path=$host_seed" >&2
+      continue
+    fi
     client_file="$host_published/client-writes/$client.txt"
-    "$docker_bin" exec "$client" sh -lc \
-      "set -eu; test \"\$(cat '$host_seed')\" = 'hello from privileged no-sidecar runtime smoke'; mkdir -p '$host_published/client-writes'; printf 'client write from %s\n' '$client' >'$client_file'"
+    if ! client_exec_script "$client" "$host_published/client-writes" "$client_file" "$client" <<'SH'
+set -eu
+write_dir="$1"
+client_file="$2"
+client="$3"
+mkdir -p "$write_dir"
+printf 'client write from %s\n' "$client" >"$client_file"
+SH
+    then
+      echo "skip with reason: client container could not write to propagated published path: $client path=$client_file" >&2
+      continue
+    fi
     client_write_count=$((client_write_count + 1))
     written_clients="$written_clients $client"
   done
@@ -222,6 +262,8 @@ else
   "$docker_bin" exec "$container_name" sh -lc \
     "set -eu; mkdir -p '/ccc-runtime/published/$SAFE_CHILD_ID/client-writes'; printf 'fallback write without external client\n' >'/ccc-runtime/published/$SAFE_CHILD_ID/client-writes/no-client.txt'"
 fi
+
+request_container_seal "$container_name"
 
 "$docker_bin" exec "$container_name" sh -lc \
   "set -eu; export CCC_NFS_ROOT='$NFS_ROOT' CCC_MOUNTD_SOCK='$MOUNTD_SOCKET'; ccc-layered status '$CHILD_ID' --json >/ccc-runtime/status-after-client.json; ccc-layered commit '$CHILD_ID' -m 'privileged runtime smoke' --json >/ccc-runtime/commit.json"

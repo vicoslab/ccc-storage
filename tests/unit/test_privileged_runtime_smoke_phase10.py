@@ -58,8 +58,23 @@ def test_runtime_root_safety_terms_are_present():
 def test_client_container_checks_use_docker_exec_and_default_container():
     text = HOST_SCRIPT.read_text()
     assert "CCC_CLIENT_CONTAINERS:-domen-cuda10" in text
-    assert "docker_bin\" exec \"$client\"" in text
+    assert "docker_bin\" exec -i \"$container_name\"" in text
+    assert "client_exec_script" in text
     assert "client-writes" in text
+
+
+def test_writable_overlay_is_sealed_before_commit_and_metadata_is_escaped():
+    host_text = HOST_SCRIPT.read_text()
+    container_text = CONTAINER_SCRIPT.read_text()
+
+    assert "request_container_seal \"$container_name\"" in host_text
+    assert "touch /ccc-runtime/control/seal" in host_text
+    assert "test -e /ccc-runtime/control/sealed" in host_text
+    assert "cleanup_mounts" in container_text
+    assert "mv \"$control_dir/seal\" \"$control_dir/sealed\"" in container_text
+    assert "printf 'CHILD_ID=%q\\n'" in container_text
+    assert "mount --make-rshared \"$runtime_root\"" in container_text
+    assert "runtime root is not shared inside privileged container" in container_text
 
 
 def test_container_exercises_current_runtime_data_plane():

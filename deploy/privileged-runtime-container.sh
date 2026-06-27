@@ -33,7 +33,7 @@ mountd_log="$runtime_root/mountd.log"
 
 mountd_pid=""
 
-cleanup() {
+cleanup_mounts() {
   set +e
   if mountpoint -q "$published_dir"; then
     umount -l "$published_dir"
@@ -44,6 +44,12 @@ cleanup() {
   if mountpoint -q "$view_dir"; then
     umount -l "$view_dir"
   fi
+  set -e
+}
+
+cleanup() {
+  set +e
+  cleanup_mounts
   if [ -n "$mountd_pid" ] && kill -0 "$mountd_pid" 2>/dev/null; then
     CCC_MOUNTD_SOCK="$socket_path" ccc-layered umount "$child_id" --json >/dev/null 2>&1 || true
     kill "$mountd_pid" >/dev/null 2>&1 || true
@@ -64,7 +70,20 @@ mkdir -p \
   "$published_dir" \
   "$control_dir"
 
-mount --make-rshared "$runtime_root" >/dev/null 2>&1 || true
+if ! mount --make-rshared "$runtime_root" >/dev/null 2>&1; then
+  echo "failed to mark runtime root as rshared inside privileged container: $runtime_root" >&2
+  exit 1
+fi
+if command -v findmnt >/dev/null 2>&1; then
+  propagation="$(findmnt -T "$runtime_root" -no PROPAGATION 2>/dev/null || true)"
+  case "$propagation" in
+    *shared*) ;;
+    *)
+      echo "runtime root is not shared inside privileged container: $runtime_root propagation=$propagation" >&2
+      exit 1
+      ;;
+  esac
+fi
 
 printf 'hello from privileged no-sidecar runtime smoke\n' >"$seed_dir/hello.txt"
 printf 'nested seed payload\n' >"$seed_dir/nested/payload.txt"
@@ -137,21 +156,25 @@ if [ "$(cat "$published_dir/hello.txt")" != "hello from privileged no-sidecar ru
   exit 1
 fi
 
-cat >"$metadata_file" <<EOF
-CHILD_ID=$child_id
-SAFE_CHILD_ID=$safe_child_id
-PUBLISHED_PATH=$published_dir
-PUBLISHED_REL=published/$safe_child_id
-MOUNTD_SOCKET=$socket_path
-NFS_ROOT=$nfs_root
-LOWERDIR=$lowerdir
-UPPERDIR=$upperdir
-VIEW_PATH=$view_dir
-EOF
+{
+  printf 'CHILD_ID=%q\n' "$child_id"
+  printf 'SAFE_CHILD_ID=%q\n' "$safe_child_id"
+  printf 'PUBLISHED_PATH=%q\n' "$published_dir"
+  printf 'PUBLISHED_REL=%q\n' "published/$safe_child_id"
+  printf 'MOUNTD_SOCKET=%q\n' "$socket_path"
+  printf 'NFS_ROOT=%q\n' "$nfs_root"
+  printf 'LOWERDIR=%q\n' "$lowerdir"
+  printf 'UPPERDIR=%q\n' "$upperdir"
+  printf 'VIEW_PATH=%q\n' "$view_dir"
+} >"$metadata_file"
 
 touch "$ready_file"
 
 while [ ! -e "$control_dir/stop" ]; do
+  if [ -e "$control_dir/seal" ]; then
+    cleanup_mounts
+    mv "$control_dir/seal" "$control_dir/sealed"
+  fi
   if ! kill -0 "$mountd_pid" 2>/dev/null; then
     echo "ccc-layered-mountd exited unexpectedly" >&2
     sed -n '1,200p' "$mountd_log" >&2 || true
