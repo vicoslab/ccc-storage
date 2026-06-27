@@ -97,6 +97,17 @@ privileged Docker container, run:
 CCC_CLIENT_CONTAINERS=domen-cuda10 deploy/privileged-runtime-smoke.sh
 ```
 
+From a CCC container with the host Docker socket mounted, Docker bind sources are
+resolved by the daemon on the host, while the caller may see the same shared
+storage through `/storage/user`. In that case pass both roots:
+
+```bash
+CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-runtime-test \
+CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/domen.tabernik@fri.uni-lj.si/ccc-layered-storage-runtime-test \
+CCC_CLIENT_CONTAINERS=domen-cuda10 \
+deploy/privileged-runtime-smoke.sh
+```
+
 This smoke is intentionally privileged and intentionally no-sidecar. It does not
 use the CCC FUSE sidecar path; instead it starts `ccc-layered-mountd` inside the
 privileged container, mounts a SquashFS child pack, creates a writable
@@ -112,7 +123,10 @@ By default the script isolates state under:
 
 `CCC_RUNTIME_ROOT` may point under `/storage/user/*`, `/tmp/*`, or this
 checkout's `.scratch/*`; broad roots such as `/`, `/storage`, `/storage/user`,
-`/storage/datasets`, `/storage/group`, and `/home` are refused. Set
+`/storage/datasets`, `/storage/group`, and `/home` are refused.
+`CCC_RUNTIME_DOCKER_SOURCE_ROOT` changes only the Docker daemon's bind source
+path and must be a specific host-visible subtree, not a broad root such as `/`,
+`/storage`, `/storage/user`, `/home`, `/opt`, or `/opt/shared_storage`. Set
 `CCC_RUNTIME_KEEP=1` to retain the per-run directory for inspection.
 
 For a manual multi-node pass, run the same command from each target node, for

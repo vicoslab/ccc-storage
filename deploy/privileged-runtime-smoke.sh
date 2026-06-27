@@ -6,6 +6,9 @@ set -euo pipefail
 # Environment:
 #   CCC_RUNTIME_ROOT            Base scratch root (default:
 #                               /storage/user/ccc-layered-storage-runtime-test)
+#   CCC_RUNTIME_DOCKER_SOURCE_ROOT
+#                               Docker-daemon-visible alias for CCC_RUNTIME_ROOT
+#                               (default: resolved CCC_RUNTIME_ROOT)
 #   CCC_CLIENT_CONTAINERS       Space-separated existing Docker containers to
 #                               exec as runtime clients (default: domen-cuda10)
 #   CCC_DOCKER_TAG              Local image tag to build/use (default:
@@ -28,6 +31,17 @@ if [ -z "$python_bin" ]; then
 fi
 tag="${CCC_DOCKER_TAG:-ccc-layered-storage:priv-runtime-local}"
 runtime_root_input="${CCC_RUNTIME_ROOT:-/storage/user/ccc-layered-storage-runtime-test}"
+runtime_docker_source_root_was_set=0
+if [ "${CCC_RUNTIME_DOCKER_SOURCE_ROOT+x}" = "x" ]; then
+  if [ -z "$CCC_RUNTIME_DOCKER_SOURCE_ROOT" ]; then
+    echo "refusing empty CCC_RUNTIME_DOCKER_SOURCE_ROOT" >&2
+    exit 2
+  fi
+  runtime_docker_source_root_input="$CCC_RUNTIME_DOCKER_SOURCE_ROOT"
+  runtime_docker_source_root_was_set=1
+else
+  runtime_docker_source_root_input=""
+fi
 client_containers="${CCC_CLIENT_CONTAINERS:-domen-cuda10}"
 
 resolve_path() {
@@ -76,6 +90,44 @@ validate_runtime_root() {
       exit 2
       ;;
   esac
+}
+
+validate_runtime_docker_source_root() {
+  local root_real="$1"
+
+  case "$root_real" in
+    /|/storage|/storage/user|/storage/datasets|/storage/group|/home|/opt|/opt/shared_storage)
+      echo "refusing unsafe CCC_RUNTIME_DOCKER_SOURCE_ROOT: $root_real" >&2
+      echo "use a specific Docker-daemon-visible subtree for CCC_RUNTIME_DOCKER_SOURCE_ROOT" >&2
+      exit 2
+      ;;
+  esac
+}
+
+print_docker_run_failure() {
+  local docker_run_output="$1"
+  local run_root="$2"
+  local docker_run_root_source="$3"
+  local runtime_root_real="$4"
+  local docker_source_root_real="$5"
+
+  echo "failed to start privileged smoke container" >&2
+  if [ -n "$docker_run_output" ]; then
+    printf '%s\n' "$docker_run_output" >&2
+  fi
+  echo "caller-visible run root: $run_root" >&2
+  echo "Docker bind source path: $docker_run_root_source" >&2
+  echo "resolved CCC_RUNTIME_ROOT: $runtime_root_real" >&2
+  echo "resolved CCC_RUNTIME_DOCKER_SOURCE_ROOT: $docker_source_root_real" >&2
+  echo "Docker resolves bind source paths on the Docker daemon host; set CCC_RUNTIME_DOCKER_SOURCE_ROOT when the caller path is a container-only alias." >&2
+  echo "caller-visible run root listing:" >&2
+  ls -ld "$run_root" >&2 || true
+  if [ -e "$(dirname "$docker_run_root_source")" ]; then
+    echo "Docker source parent listing:" >&2
+    ls -ld "$(dirname "$docker_run_root_source")" "$docker_run_root_source" >&2 || true
+  else
+    echo "docker source path is not visible from caller; assuming shared storage alias" >&2
+  fi
 }
 
 wait_for_ready() {
@@ -147,12 +199,20 @@ repo_real="$(resolve_path "$repo_root")"
 runtime_root_real="$(resolve_path "$runtime_root_input")"
 validate_runtime_root "$runtime_root_real" "$repo_real"
 echo "resolved CCC_RUNTIME_ROOT: $runtime_root_real"
+if [ "$runtime_docker_source_root_was_set" = "1" ]; then
+  docker_source_root_real="$(resolve_path "$runtime_docker_source_root_input")"
+else
+  docker_source_root_real="$runtime_root_real"
+fi
+validate_runtime_docker_source_root "$docker_source_root_real"
+echo "resolved CCC_RUNTIME_DOCKER_SOURCE_ROOT: $docker_source_root_real"
 
 hostname_safe="$(safe_name "$(hostname -s 2>/dev/null || hostname || printf host)")"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 run_id="${hostname_safe}-${timestamp}-$$"
 run_id_safe="$(safe_name "$run_id")"
 run_root="$runtime_root_real/runs/$run_id_safe"
+docker_run_root_source="$docker_source_root_real/runs/$run_id_safe"
 container_name="ccc-layered-mountd-smoke-$run_id_safe"
 
 if [ "${CCC_SKIP_BUILD:-}" != "1" ]; then
@@ -163,6 +223,17 @@ fi
 
 mkdir -p "$run_root"
 echo "per-run root: $run_root"
+echo "Docker bind source root: $docker_run_root_source"
+if [ "$docker_source_root_real" != "$runtime_root_real" ]; then
+  if [ -e "$(dirname "$docker_run_root_source")" ] || [ -e "$docker_source_root_real" ]; then
+    if ! mkdir -p "$docker_run_root_source"; then
+      echo "failed to create Docker source run root: $docker_run_root_source" >&2
+      exit 1
+    fi
+  else
+    echo "docker source path is not visible from caller; assuming shared storage alias"
+  fi
+fi
 
 container_started=""
 cleanup() {
@@ -175,15 +246,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"$docker_bin" run -d \
+if ! docker_run_output="$("$docker_bin" run -d \
   --name "$container_name" \
   --privileged \
   --device /dev/fuse:/dev/fuse:rwm \
   --security-opt apparmor=unconfined \
   --security-opt seccomp=unconfined \
-  --mount "type=bind,src=$run_root,dst=/ccc-runtime,bind-propagation=rshared" \
+  --mount "type=bind,src=$docker_run_root_source,dst=/ccc-runtime,bind-propagation=rshared" \
   "$tag" \
-  sh -lc 'deploy/privileged-runtime-container.sh' >/dev/null
+  sh -lc 'deploy/privileged-runtime-container.sh' 2>&1)"; then
+  print_docker_run_failure "$docker_run_output" "$run_root" "$docker_run_root_source" "$runtime_root_real" "$docker_source_root_real"
+  exit 1
+fi
 container_started="$container_name"
 
 wait_for_ready "$container_name" "$run_root"

@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 HOST_SCRIPT = ROOT / "deploy" / "privileged-runtime-smoke.sh"
 CONTAINER_SCRIPT = ROOT / "deploy" / "privileged-runtime-container.sh"
+PREREQS_DOC = ROOT / "deploy" / "PREREQS.md"
 
 
 def _text() -> str:
@@ -53,6 +54,23 @@ def test_runtime_root_safety_terms_are_present():
     ):
         assert phrase in text
     assert "refusing unsafe CCC_RUNTIME_ROOT" in text
+
+
+def test_docker_source_root_env_is_documented_and_used_for_mount_source():
+    host_text = HOST_SCRIPT.read_text()
+    prereqs_text = PREREQS_DOC.read_text()
+
+    assert "CCC_RUNTIME_DOCKER_SOURCE_ROOT" in host_text
+    assert "CCC_RUNTIME_DOCKER_SOURCE_ROOT" in prereqs_text
+    assert (
+        "/opt/shared_storage/user_data/domen.tabernik@fri.uni-lj.si/"
+        "ccc-layered-storage-runtime-test"
+    ) in prereqs_text
+    assert "refusing empty CCC_RUNTIME_DOCKER_SOURCE_ROOT" in host_text
+    assert "refusing unsafe CCC_RUNTIME_DOCKER_SOURCE_ROOT" in host_text
+    assert "docker_run_root_source=\"$docker_source_root_real/runs/$run_id_safe\"" in host_text
+    assert 'src=$docker_run_root_source' in host_text
+    assert 'src=$run_root' not in host_text
 
 
 def test_client_container_checks_use_docker_exec_and_default_container():
