@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,6 +22,49 @@ class PackBuildError(RuntimeError):
 # stays navigable before the child is mounted. Hidden from user-facing listings
 # (it starts with a dot, so ``managed_parent.is_internal_name`` filters it).
 BOUNDARY_MARKER_NAME = ".ccc-boundary"
+_OVERLAY_WHITEOUT_RE = re.compile(r"^\.wh\..+")
+
+
+def is_overlayfs_artifact(path: str | Path) -> bool:
+    """True for overlay/fuse-overlayfs whiteout metadata, not user files.
+
+    Current delta packs record added/modified regular content. Deletion
+    tombstones require an explicit whiteout-aware format and must not leak the
+    implementation files (``.wh.*``) into user-visible SquashFS layers.
+    """
+    return bool(_OVERLAY_WHITEOUT_RE.match(Path(path).name))
+
+
+def prepare_delta_source(src: str | Path, dst: str | Path) -> int:
+    """Copy a sealed overlay upper into *dst*, filtering overlay metadata.
+
+    Returns the number of copied regular files/symlinks. Directories are
+    recreated, ``.wh.*`` whiteout artifacts are skipped, and unsupported special
+    files are ignored so they cannot leak into immutable user-visible packs.
+    """
+    src_path = Path(src)
+    dst_path = Path(dst)
+    if not src_path.is_dir():
+        raise PackBuildError(f"source directory does not exist: {src_path}")
+    copied = 0
+    dst_path.mkdir(parents=True, exist_ok=True)
+    for entry in sorted(src_path.rglob("*")):
+        rel = entry.relative_to(src_path)
+        if any(is_overlayfs_artifact(part) for part in rel.parts):
+            continue
+        target = dst_path / rel
+        if entry.is_symlink():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.symlink(os.readlink(entry), target)
+            copied += 1
+        elif entry.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif entry.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(entry, target)
+            copied += 1
+        # FIFOs/devices/sockets are overlay implementation details for now.
+    return copied
 
 
 @dataclass(frozen=True)
@@ -84,10 +130,14 @@ def build_delta(
     """Build a delta pack from a sealed overlay upper.
 
     Tombstones are reserved for the later whiteout-aware implementation. Phase 03
-    records only added/modified files by packing the sealed upper as-is.
+    records added/modified user files while filtering fuse-overlayfs ``.wh.*``
+    implementation artifacts so they do not leak into immutable lower packs.
     """
     _ = base_manifest, tombstones
-    return build_pack(src, out, comp=comp, block=block)
+    with tempfile.TemporaryDirectory(prefix="ccc-delta-src-") as tmp:
+        prepared = Path(tmp) / "upper"
+        prepare_delta_source(src, prepared)
+        return build_pack(prepared, out, comp=comp, block=block)
 
 
 def build_pack(

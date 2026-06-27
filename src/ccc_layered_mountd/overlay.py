@@ -82,6 +82,10 @@ def _safe_name(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_") or "child"
 
 
+def _is_overlayfs_artifact(path: Path) -> bool:
+    return path.name.startswith(".wh.")
+
+
 def ensure_active_upper(paths: OverlayPaths) -> Path:
     paths.active_upper.mkdir(parents=True, exist_ok=True)
     paths.sealed_dir.mkdir(parents=True, exist_ok=True)
@@ -95,6 +99,8 @@ def dirty_stats(path: str | Path) -> DirtyStats:
     count = 0
     total = 0
     for entry in upper.rglob("*"):
+        if _is_overlayfs_artifact(entry):
+            continue
         if entry.is_file() or entry.is_symlink():
             count += 1
             try:

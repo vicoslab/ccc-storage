@@ -4,6 +4,7 @@ from ccc_layered_core.checksum import sha256_file
 from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack, load_manifest
 from ccc_layered_mountd import daemon
 from ccc_layered_mountd.daemon import MountdService
+from ccc_layered_mountd.overlay import dirty_stats
 from ccc_layered_pack.builder import BuildResult
 
 
@@ -37,6 +38,22 @@ def test_mountd_status_reports_dirty_overlay_stats(fake_nfs):
     assert status["state"] == "dirty"
     assert status["overlay"]["file_count"] == 1
     assert status["overlay"]["bytes"] == 3
+
+
+def test_dirty_stats_ignore_fuse_overlayfs_whiteout_artifacts(tmp_path):
+    upper = tmp_path / "upper"
+    upper.mkdir()
+    (upper / "client.txt").write_text("client")
+    (upper / ".wh.deleted").write_text("")
+    opaque_dir = upper / "new-dir"
+    opaque_dir.mkdir()
+    (opaque_dir / ".wh..wh..opq").write_text("")
+
+    stats = dirty_stats(upper)
+
+    assert stats.dirty is True
+    assert stats.file_count == 1
+    assert stats.bytes == len("client")
 
 
 def test_manual_commit_builds_delta_publishes_manifest_and_clears_sealed_overlay(
