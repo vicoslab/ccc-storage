@@ -107,6 +107,24 @@ and byte readback, recalls a cold pack with checksum/size verification, rejects 
 corrupt recall without publishing a destination pack, and removes its temporary
 objects/bucket unless `CCC_S3_KEEP=1` is set.
 
+For the stronger end-to-end cold-tier and external-HPC exchange validation, run:
+
+```bash
+PYTHON=/home/domen/conda/envs/ccc-dev/bin/python \
+CCC_S3_CREDENTIALS_SH=/path/to/s3_storage_premissions.sh \
+CCC_S3_ENDPOINT=https://ceph-7.fri.uni-lj.si \
+CCC_S3_ADDRESSING_STYLE=auto \
+deploy/s3-cold-hpc-smoke.sh
+```
+
+This smoke creates a real dirty overlay for a dataset child, commits it through
+`ccc-layered-mountd` into a SquashFS delta pack, verifies the dirty file inside
+the delta, archives the full committed pack stack to S3 cold storage, removes hot
+pack files, recalls them from S3 with checksum/size verification, builds and
+round-trips an external-HPC packset bundle, and round-trips an HPC output delta
+plus provenance through the S3 import-queue metadata path. It still does not SSH
+to or submit work on an external HPC.
+
 Ceph RGW compatibility requires boto3/botocore S3v4 with automatic addressing and
 request/response checksum calculation set to `when_required`; the
 `Boto3ObjectStore` defaults encode this. Some CCC nodes may resolve
