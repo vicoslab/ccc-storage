@@ -22,6 +22,6 @@ COPY deploy ./deploy
 COPY Makefile ./
 
 RUN python -m pip install --upgrade pip \
-    && python -m pip install -e '.[dev]'
+    && python -m pip install -e '.[dev,manifest,s3]'
 
 CMD ["sh", "-lc", "make test"]

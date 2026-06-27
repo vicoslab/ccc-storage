@@ -14,7 +14,7 @@ from pathlib import Path
 
 from ccc_layered_core.checksum import sha256_file
 from ccc_layered_core.manifest import ChildManifest, PackInfo, S3Info, dump_atomic
-from ccc_layered_hpc.object_store import LocalObjectStore, ObjectStoreError
+from ccc_layered_hpc.object_store import ObjectStore, ObjectStoreError
 
 
 class RecallError(RuntimeError):
@@ -34,7 +34,7 @@ def _pack_key(prefix: str, pack: PackInfo) -> str:
 def mirror_committed_packs(
     manifest: ChildManifest,
     manifest_path: str | Path,
-    store: LocalObjectStore,
+    store: ObjectStore,
     *,
     prefix: str,
 ) -> MirrorResult:
@@ -68,7 +68,7 @@ def mirror_committed_packs(
 def recall_cold_pack(
     manifest: ChildManifest,
     manifest_path: str | Path,
-    store: LocalObjectStore,
+    store: ObjectStore,
     hot_dir: str | Path,
 ) -> ChildManifest:
     """Recall a cold pack stack into *hot_dir*, verify, then atomically publish.

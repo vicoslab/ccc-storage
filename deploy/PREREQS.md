@@ -88,6 +88,32 @@ It builds the repository `Dockerfile` with a local tag, then runs unit tests,
 container. `/dev/fuse`, `CAP_SYS_ADMIN`, and the AppArmor mount relaxation are
 passed only to that container.
 
+## Real S3/Ceph mirror smoke
+
+For real S3-compatible object-store validation, place credentials in a shell file
+that exports only standard AWS variables, then run:
+
+```bash
+PYTHON=/home/domen/conda/envs/ccc-dev/bin/python \
+CCC_S3_CREDENTIALS_SH=/path/to/s3_storage_premissions.sh \
+CCC_S3_ENDPOINT=https://ceph-7.fri.uni-lj.si \
+CCC_S3_ADDRESSING_STYLE=auto \
+deploy/s3-smoke.sh
+```
+
+The script sources the credential file without printing it, creates or validates
+a bucket, uploads committed pack and manifest objects, verifies object existence
+and byte readback, recalls a cold pack with checksum/size verification, rejects a
+corrupt recall without publishing a destination pack, and removes its temporary
+objects/bucket unless `CCC_S3_KEEP=1` is set.
+
+Ceph RGW compatibility requires boto3/botocore S3v4 with automatic addressing and
+request/response checksum calculation set to `when_required`; the
+`Boto3ObjectStore` defaults encode this. Some CCC nodes may resolve
+`ceph-7.fri.uni-lj.si` only to an unreachable IPv6 address; validate from nodes
+that resolve/reach the IPv4 service, such as `morbo`, `calculon`, or
+`crushinator` in the current CCC network.
+
 ## Privileged no-sidecar Docker runtime smoke
 
 For an actual Docker runtime check where mount authority is fully inside one
