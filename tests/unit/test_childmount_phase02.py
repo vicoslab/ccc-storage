@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pytest
+
 from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack
 from ccc_layered_mountd import childmount
-from ccc_layered_mountd.childmount import ChildMountManager
+from ccc_layered_mountd.childmount import ChildMountError, ChildMountManager
 
 
 @dataclass
@@ -95,3 +97,20 @@ def test_child_mount_manager_mounts_entire_pack_stack(monkeypatch, tmp_path):
         manifest.pack_stack.lowers[0].path,
         manifest.pack_stack.lowers[1].path,
     ]
+
+
+def test_mount_at_refuses_silent_reuse_at_wrong_mountpoint(monkeypatch, tmp_path):
+    def fake_mount_stack_ro(packs, mountpoint, prefer_kernel=False):
+        return FakeHandle(mountpoint=mountpoint)
+
+    monkeypatch.setattr(childmount, "mount_stack_ro", fake_mount_stack_ro)
+    manager = ChildMountManager(tmp_path / "run")
+    manifest = _manifest(tmp_path)
+
+    generic = manager.mount(manifest)
+    nested_target = tmp_path / "run" / "mounts" / "parent" / "nested"
+    nested_target.mkdir(parents=True)
+
+    with pytest.raises(ChildMountError, match="already mounted"):
+        manager.mount_at(manifest, nested_target)
+    assert manager.status(manifest)["mountpoint"] == str(generic.mountpoint)

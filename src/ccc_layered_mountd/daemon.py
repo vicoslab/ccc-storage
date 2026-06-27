@@ -40,7 +40,7 @@ from ccc_layered_mountd.overlay import (
 )
 from ccc_layered_mountd.workers.compaction import plan_compaction
 from ccc_layered_mountd.workers.policy import CommitPolicy, evaluate, overlay_inputs
-from ccc_layered_pack.builder import build_delta
+from ccc_layered_pack.builder import build_delta, pack_object_dir
 from ccc_layered_pack.verify import verify_pack
 
 _RUNTIME_BINARIES = (
@@ -122,6 +122,33 @@ class MountdService:
         self.mounts.mount(manifest)
         return self._manifest_status(manifest)
 
+    def handle_mount_tree(self, selector: str) -> dict[str, Any]:
+        """Mount a parent pack and all declared child-boundary packs.
+
+        The parent SquashFS contains only boundary stubs/references. Each child
+        manifest is mounted from its own pack stack directly onto the boundary
+        directory inside the mounted parent view.
+        """
+        parent = self._find(selector)
+        parent_record = self.mounts.mount(parent)
+        nested: list[dict[str, Any]] = []
+        for boundary in parent.child_boundaries:
+            child = self._find(boundary.child_id)
+            boundary_path = boundary.path.strip("/")
+            boundary_mountpoint = parent_record.mountpoint / boundary_path
+            child_record = self.mounts.mount_at(child, boundary_mountpoint)
+            nested.append(
+                {
+                    "id": child.id,
+                    "path": boundary_path,
+                    "mountpoint": str(child_record.mountpoint),
+                    "mounted": child_record.handle.mounted,
+                }
+            )
+        status = self._manifest_status(parent)
+        status["nested_mounts"] = nested
+        return status
+
     def handle_umount(self, selector: str) -> dict[str, Any]:
         manifest = self._find(selector)
         self.mounts.unmount(manifest.id)
@@ -146,7 +173,7 @@ class MountdService:
             ensure_active_upper(paths)
             new_generation = manifest.generation + 1
             sealed = seal_active_upper(paths, generation=new_generation)
-            delta_dir = self.nfs_root / "packs" / _safe_child_name(manifest.id)
+            delta_dir = pack_object_dir(self.nfs_root / "packs", manifest.id)
             delta_dir.mkdir(parents=True, exist_ok=True)
             delta_pack = delta_dir / f"delta-g{new_generation:04d}.sqfs"
             result = build_delta(sealed.path, manifest, delta_pack)
@@ -220,6 +247,8 @@ class MountdService:
                 return Response(ok=True, result=self.handle_status(request.path))
             if request.command == "mount":
                 return Response(ok=True, result=self.handle_mount(request.path))
+            if request.command == "mount-tree":
+                return Response(ok=True, result=self.handle_mount_tree(request.path))
             if request.command == "umount":
                 return Response(ok=True, result=self.handle_umount(request.path))
             if request.command == "commit":

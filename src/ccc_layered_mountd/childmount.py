@@ -60,14 +60,45 @@ class ChildMountManager:
         self._records: dict[str, MountRecord] = {}
 
     def mount(self, manifest: ChildManifest) -> MountRecord:
+        return self.mount_at(
+            manifest,
+            self.mounts_dir / _safe_name(manifest.id),
+            require_existing=False,
+        )
+
+    def mount_at(
+        self,
+        manifest: ChildManifest,
+        mountpoint: str | Path,
+        *,
+        require_existing: bool = True,
+    ) -> MountRecord:
+        """Mount *manifest* at an explicit mountpoint.
+
+        Nested pack boundaries use a mountpoint inside the already-mounted parent
+        view. The boundary directory must already exist there; this prevents a
+        missing parent stub from being silently created outside the root pack.
+        """
         existing = self._records.get(manifest.id)
         if existing and existing.handle.mounted:
+            requested = Path(mountpoint)
+            if existing.mountpoint != requested:
+                raise ChildMountError(
+                    f"manifest {manifest.id} is already mounted at "
+                    f"{existing.mountpoint}, not requested mountpoint {requested}"
+                )
             existing.refcount += 1
             existing.last_used = self._clock()
             return existing
         if not manifest.pack_stack.lowers:
             raise ChildMountError(f"manifest {manifest.id} has no pack lowers")
-        mountpoint = self.mounts_dir / _safe_name(manifest.id)
+        mountpoint = Path(mountpoint)
+        if require_existing and not mountpoint.is_dir():
+            raise ChildMountError(
+                f"mountpoint for {manifest.id} is not an existing directory: {mountpoint}"
+            )
+        if not require_existing:
+            mountpoint.mkdir(parents=True, exist_ok=True)
         handle = mount_stack_ro(
             manifest.pack_stack.lowers,
             mountpoint,
@@ -141,7 +172,7 @@ class ChildMountManager:
         return len(self.active_ids())
 
     def stop_all(self) -> None:
-        for manifest_id in list(self._records):
+        for manifest_id in reversed(list(self._records)):
             record = self._records.pop(manifest_id)
             record.handle.unmount()
 

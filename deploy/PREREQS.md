@@ -161,6 +161,21 @@ the published path, commits the dirty overlay into a delta pack, then unmounts
 and remounts the committed child stack to prove the transparent read-only view
 contains both original base-pack files and newly committed delta-pack files.
 
+For nested/hierarchical pack validation, run:
+
+```bash
+CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-nested-test \
+CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/domen.tabernik@fri.uni-lj.si/ccc-layered-storage-nested-test \
+deploy/nested-runtime-smoke.sh
+```
+
+This smoke builds a parent/root SquashFS with `exclude_boundaries=[...]`, verifies
+by `unsquashfs` that the parent pack contains only parent files plus a
+`.ccc-boundary` mountpoint stub, stores the nested child SquashFS in a separate
+`packs/<child-id>/` namespace, then runs `ccc-layered mount-tree` through a real
+mountd socket to mount the child directly at the parent boundary path and read
+both parent and child data through the combined tree.
+
 By default the script isolates state under:
 
 ```text

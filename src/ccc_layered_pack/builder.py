@@ -25,6 +25,20 @@ BOUNDARY_MARKER_NAME = ".ccc-boundary"
 _OVERLAY_WHITEOUT_RE = re.compile(r"^\.wh\..+")
 
 
+def safe_pack_name(child_id: str) -> str:
+    """Filesystem-safe namespace for one managed child/root pack object set."""
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", child_id).strip("_") or "child"
+
+
+def pack_object_dir(packs_root: str | Path, child_id: str) -> Path:
+    """Directory that stores SquashFS objects for exactly one manifest id.
+
+    Nested child packs live beside the parent pack namespace under the shared
+    packs root; they are not stored inside the parent's SquashFS payload.
+    """
+    return Path(packs_root) / safe_pack_name(child_id)
+
+
 def is_overlayfs_artifact(path: str | Path) -> bool:
     """True for overlay/fuse-overlayfs whiteout metadata, not user files.
 
@@ -104,6 +118,40 @@ def create_boundary_markers(src: str | Path, boundaries: list[str] | None) -> li
     return created
 
 
+def prepare_parent_source(
+    src: str | Path,
+    dst: str | Path,
+    *,
+    exclude_boundaries: list[str] | None = None,
+) -> None:
+    """Copy parent-owned files to *dst* and emit child-boundary stubs.
+
+    Child payload under every boundary is deliberately omitted. The boundary
+    directory itself is kept with an internal marker so the mounted parent pack
+    has a real mountpoint where the child SquashFS can be mounted later.
+    """
+    src_path = Path(src)
+    dst_path = Path(dst)
+    excludes = tuple(
+        item.strip("/") for item in (exclude_boundaries or []) if item.strip("/")
+    )
+    dst_path.mkdir(parents=True, exist_ok=True)
+    for entry in sorted(src_path.rglob("*")):
+        rel = entry.relative_to(src_path).as_posix()
+        if any(rel == excluded or rel.startswith(excluded + "/") for excluded in excludes):
+            continue
+        target = dst_path / rel
+        if entry.is_symlink():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.symlink(os.readlink(entry), target)
+        elif entry.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif entry.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(entry, target)
+    create_boundary_markers(dst_path, list(excludes))
+
+
 def count_files(src: str | Path, *, exclude_boundaries: list[str] | None = None) -> int:
     """Count regular files below *src*, excluding nested child-pack boundaries."""
     root = Path(src)
@@ -158,21 +206,28 @@ def build_pack(
         raise PackBuildError("mksquashfs not found; install squashfs-tools in the ccc-dev env")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    args = [
-        exe,
-        str(src_path),
-        str(out_path),
-        "-noappend",
-        "-no-progress",
-        "-comp",
-        comp,
-        "-b",
-        block,
-    ]
-    for boundary in exclude_boundaries or []:
-        args.extend(["-e", boundary.strip("/")])
+    with tempfile.TemporaryDirectory(prefix="ccc-pack-src-") as tmp:
+        pack_src = src_path
+        if exclude_boundaries:
+            pack_src = Path(tmp) / "parent"
+            prepare_parent_source(
+                src_path,
+                pack_src,
+                exclude_boundaries=exclude_boundaries,
+            )
+        args = [
+            exe,
+            str(pack_src),
+            str(out_path),
+            "-noappend",
+            "-no-progress",
+            "-comp",
+            comp,
+            "-b",
+            block,
+        ]
 
-    cp = subprocess.run(args, capture_output=True, text=True, check=False)
+        cp = subprocess.run(args, capture_output=True, text=True, check=False)
     if cp.returncode != 0:
         msg = cp.stderr.strip() or cp.stdout.strip()
         raise PackBuildError(f"mksquashfs failed ({cp.returncode}): {msg}")

@@ -6,6 +6,7 @@ import pytest
 
 from ccc_layered_pack import builder
 from ccc_layered_pack.builder import (
+    BOUNDARY_MARKER_NAME,
     PackBuildError,
     build_pack,
     count_files,
@@ -83,5 +84,36 @@ def test_build_pack_invokes_mksquashfs_with_deterministic_defaults_and_excludes(
     assert "-no-progress" in result.args
     assert "-comp" in result.args
     assert "zstd" in result.args
-    assert "-e" in result.args
-    assert "child-pack" in result.args
+    assert "-e" not in result.args
+
+
+def test_build_pack_keeps_boundary_stub_but_excludes_child_payload(monkeypatch, tmp_path):
+    src = tmp_path / "src"
+    boundary = src / "conda" / "envs" / "env-a"
+    boundary.mkdir(parents=True)
+    (src / "parent-only.txt").write_text("parent")
+    (boundary / "bin").mkdir()
+    (boundary / "bin" / "python").write_text("child payload must not leak")
+    out = tmp_path / "out.sqfs"
+
+    monkeypatch.setattr(
+        builder.shutil,
+        "which",
+        lambda name: "/bin/mksquashfs" if name == "mksquashfs" else None,
+    )
+
+    def fake_run(args, capture_output, text, check):
+        staged = tmp_path / "observed-stage"
+        builder.shutil.copytree(args[1], staged)
+        out.write_bytes(b"sqfs-bytes")
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(builder.subprocess, "run", fake_run)
+
+    result = build_pack(src, out, exclude_boundaries=["conda/envs/env-a"])
+
+    staged = tmp_path / "observed-stage"
+    assert (staged / "parent-only.txt").read_text() == "parent"
+    assert (staged / "conda" / "envs" / "env-a" / BOUNDARY_MARKER_NAME).exists()
+    assert not (staged / "conda" / "envs" / "env-a" / "bin" / "python").exists()
+    assert result.pack.file_count == 1

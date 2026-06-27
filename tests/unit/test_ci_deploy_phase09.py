@@ -38,6 +38,7 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
     docker_smoke = ROOT / "deploy" / "docker-smoke.sh"
     s3_smoke = ROOT / "deploy" / "s3-smoke.sh"
     s3_cold_hpc_smoke = ROOT / "deploy" / "s3-cold-hpc-smoke.sh"
+    nested_smoke = ROOT / "deploy" / "nested-runtime-smoke.sh"
 
     for path in (
         service,
@@ -49,6 +50,7 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
         docker_smoke,
         s3_smoke,
         s3_cold_hpc_smoke,
+        nested_smoke,
     ):
         assert path.exists(), path
 
@@ -74,6 +76,7 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
     assert "docker-smoke.sh" in prereq_text
     assert "s3-smoke.sh" in prereq_text
     assert "s3-cold-hpc-smoke.sh" in prereq_text
+    assert "nested-runtime-smoke.sh" in prereq_text
     assert "ceph-7.fri.uni-lj.si" in prereq_text
     assert "ccc_allow_fuse_skip" in prereq_text
 

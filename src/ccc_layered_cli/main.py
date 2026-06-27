@@ -155,7 +155,7 @@ def main(argv: list[str] | None = None) -> int:
     doctor = sub.add_parser("doctor", help="probe socket, NFS root, and local capabilities")
     doctor.add_argument("--json", action="store_true")
 
-    for name in ("status", "mount", "umount"):
+    for name in ("status", "mount", "mount-tree", "umount"):
         p = sub.add_parser(name, help=f"{name} a managed child via mountd")
         p.add_argument("path")
         p.add_argument("--json", action="store_true")
