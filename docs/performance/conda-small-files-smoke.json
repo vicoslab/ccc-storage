@@ -1,0 +1,16 @@
+{
+  "compression_ratio_raw_to_pack": 20.833,
+  "create_seconds": 5.040278,
+  "files": 3000,
+  "pack_bytes_seen_by_stat": 36864,
+  "pack_files_per_nfs_object": 3000,
+  "pack_path": "/storage/user/agent-workspace/conda-compute-cluster/ccc-squashfs-storage/ccc-layered-storage/.scratch/bench/conda-small-files/packs/env.sqfs",
+  "pack_sha256": "ed6623582579f2a9339a7c3b4b372d081c1d4a1fd06877a44328162b6cbcf0d7",
+  "pack_size": 36864,
+  "pack_stat_seconds": 0.000823,
+  "payload_bytes_per_file": 256,
+  "raw_bytes": 768000,
+  "raw_files_per_second_stat": 3540.8,
+  "raw_stat_seconds": 0.847258,
+  "squashfs_build_seconds": 1.810742
+}

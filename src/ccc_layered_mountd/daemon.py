@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import json
 import os
 import shutil
 import signal
@@ -72,6 +73,7 @@ class MountdService:
         prefer_kernel: bool = False,
         managed_parent: str | None = None,
         observe_root: str | Path | None = None,
+        observe_mountpoint: str | Path | None = None,
     ) -> None:
         self.nfs_root = Path(nfs_root)
         self.run_dir = Path(run_dir)
@@ -81,6 +83,7 @@ class MountdService:
         self.manifest_paths: dict[str, Path] = {}
         self.parent: ManagedParent | None = None
         self.observer: ObservationManager | None = None
+        self.observe_mountpoint = Path(observe_mountpoint) if observe_mountpoint else None
         if managed_parent:
             self.parent = ManagedParent(
                 self.nfs_root,
@@ -172,6 +175,12 @@ class MountdService:
 
     def handle_commit(self, selector: str, *, message: str = "") -> dict[str, Any]:
         manifest = self._find(selector)
+        mount_status = self.mounts.status(manifest)
+        if mount_status.get("mounted") and mount_status.get("mode") == "rw":
+            raise ChildMountError(
+                f"cannot commit {manifest.id} while its writable child view is still mounted; "
+                "unmount/drain it first"
+            )
         paths = self.overlay_paths(manifest)
         ensure_active_upper(paths)
         stats = dirty_stats(paths.active_upper)
@@ -272,8 +281,18 @@ class MountdService:
             "registry_reachable": self.registry_dir.is_dir(),
             "child_count": len(self.children),
             "active_submount_count": self.mounts.active_count(),
+            "observation_mountpoint": str(self.observe_mountpoint or ""),
+            "observation_mounted": bool(
+                self.observe_mountpoint and _is_mountpoint(self.observe_mountpoint)
+            ),
             "runtime": _probe_summary_dict(),
         }
+
+    def reap_idle_mounts(self, ttl: float) -> list[str]:
+        """Unmount child mounts whose refcount has been zero for at least *ttl*."""
+        if ttl <= 0:
+            return []
+        return self.mounts.idle_unmount_expired(ttl)
 
     def dispatch(self, request: Request) -> Response:
         try:
@@ -416,8 +435,37 @@ def _probe_summary() -> list[str]:
     return lines
 
 
-def _serve_forever(server: ControlServer, service: MountdService) -> int:
+def _is_mountpoint(path: str | Path) -> bool:
+    return os.path.ismount(path)
+
+
+def _wait_for_mountpoint(path: str | Path, timeout: float) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _is_mountpoint(path):
+            return True
+        time.sleep(0.1)
+    return _is_mountpoint(path)
+
+
+def _write_ready_file(service: MountdService, ready_file: str | Path) -> None:
+    path = Path(ready_file)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(json.dumps(service.handle_doctor(), indent=2, sort_keys=True) + "\n")
+    tmp.replace(path)
+
+
+def _serve_forever(
+    server: ControlServer,
+    service: MountdService,
+    *,
+    ready_file: str | Path | None = None,
+    idle_unmount_ttl: float = 0.0,
+    idle_reap_interval: float = 30.0,
+) -> int:
     stop = False
+    next_reap = time.monotonic() + max(idle_reap_interval, 0.1)
 
     def _handler(signum, frame):  # type: ignore[no-untyped-def]
         nonlocal stop
@@ -427,7 +475,13 @@ def _serve_forever(server: ControlServer, service: MountdService) -> int:
     old_term = signal.signal(signal.SIGTERM, _handler)
     try:
         server.start()
+        if ready_file:
+            _write_ready_file(service, ready_file)
         while not stop:
+            if idle_unmount_ttl > 0 and time.monotonic() >= next_reap:
+                with contextlib.suppress(Exception):
+                    service.reap_idle_mounts(idle_unmount_ttl)
+                next_reap = time.monotonic() + max(idle_reap_interval, 0.1)
             time.sleep(0.2)
     finally:
         with contextlib.suppress(Exception):
@@ -450,6 +504,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-dir", default=os.environ.get("CCC_NODE_RUN_DIR", "/run/ccc-layered"))
     parser.add_argument("--socket", default=os.environ.get("CCC_MOUNTD_SOCK", ""))
     parser.add_argument(
+        "--prefer-kernel",
+        action="store_true",
+        default=os.environ.get("CCC_PREFER_KERNEL", "").lower() in {"1", "true", "yes", "on"},
+        help="prefer kernel mount(2) helpers over FUSE helpers where supported",
+    )
+    parser.add_argument(
+        "--socket-mode",
+        default=os.environ.get("CCC_MOUNTD_SOCKET_MODE", "0600"),
+        help="octal permissions for the control socket (default: 0600)",
+    )
+    parser.add_argument(
         "--managed-parent",
         default=os.environ.get("CCC_MANAGED_PARENT", ""),
         help="managed parent path whose children this node serves (e.g. /managed/dataset)",
@@ -464,6 +529,29 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("CCC_OBSERVE_MOUNTPOINT", ""),
         help="mount a live pyfuse3 observation dispatcher at this path",
     )
+    parser.add_argument(
+        "--observe-ready-timeout",
+        type=float,
+        default=float(os.environ.get("CCC_OBSERVE_READY_TIMEOUT", "10")),
+        help="seconds to wait for --observe-mountpoint before serving",
+    )
+    parser.add_argument(
+        "--ready-file",
+        default=os.environ.get("CCC_MOUNTD_READY_FILE", ""),
+        help="write doctor JSON here once the socket is accepting requests",
+    )
+    parser.add_argument(
+        "--idle-unmount-ttl",
+        type=float,
+        default=float(os.environ.get("CCC_IDLE_UNMOUNT_TTL", "300")),
+        help="seconds before idle refcount-zero child mounts are unmounted; <=0 disables",
+    )
+    parser.add_argument(
+        "--idle-reap-interval",
+        type=float,
+        default=float(os.environ.get("CCC_IDLE_REAP_INTERVAL", "30")),
+        help="seconds between idle-mount cleanup passes",
+    )
     parser.add_argument("--once-doctor", action="store_true", help="print doctor JSON and exit")
     ns = parser.parse_args(argv)
 
@@ -477,8 +565,10 @@ def main(argv: list[str] | None = None) -> int:
     service = MountdService(
         ns.nfs_root,
         ns.run_dir,
+        prefer_kernel=bool(ns.prefer_kernel),
         managed_parent=ns.managed_parent or None,
         observe_root=ns.observe_root or None,
+        observe_mountpoint=ns.observe_mountpoint or None,
     )
     service.reload_registry()
     if ns.observe_mountpoint:
@@ -500,14 +590,33 @@ def main(argv: list[str] | None = None) -> int:
             name="ccc-layered-observe-fuse",
             daemon=True,
         ).start()
+        if ns.observe_ready_timeout > 0 and not _wait_for_mountpoint(
+            ns.observe_mountpoint,
+            ns.observe_ready_timeout,
+        ):
+            print(
+                f"ccc-layered-mountd: observation mountpoint not ready after "
+                f"{ns.observe_ready_timeout:g}s: {ns.observe_mountpoint}",
+                flush=True,
+            )
+            return 3
     if ns.once_doctor:
-        import json
-
         print(json.dumps(service.handle_doctor(), indent=2, sort_keys=True))
         return 0
     socket_path = ns.socket or str(Path(ns.run_dir) / "mountd.sock")
-    server = ControlServer(socket_path, service)
-    return _serve_forever(server, service)
+    try:
+        socket_mode = int(str(ns.socket_mode), 8)
+    except ValueError:
+        print("ccc-layered-mountd: --socket-mode must be an octal mode such as 0600 or 0660")
+        return 2
+    server = ControlServer(socket_path, service, socket_mode=socket_mode)
+    return _serve_forever(
+        server,
+        service,
+        ready_file=ns.ready_file or None,
+        idle_unmount_ttl=ns.idle_unmount_ttl,
+        idle_reap_interval=ns.idle_reap_interval,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover

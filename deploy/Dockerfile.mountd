@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+
+LABEL org.opencontainers.image.title="ccc-layered-mountd"
+
+WORKDIR /workspace/ccc-layered-storage
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        fuse-overlayfs \
+        fuse3 \
+        gcc \
+        libfuse3-dev \
+        pkg-config \
+        squashfs-tools \
+        squashfuse \
+        tini \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY deploy ./deploy
+
+RUN python -m pip install --upgrade pip \
+    && python -m pip install '.[manifest,fuse]'
+
+ENTRYPOINT ["tini", "--", "/workspace/ccc-layered-storage/deploy/mountd-entrypoint.sh"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD ccc-layered doctor --json >/dev/null || exit 1

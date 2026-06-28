@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import socket
 import threading
 from pathlib import Path
@@ -28,9 +29,16 @@ class ControlServer:
     simple and threaded because it is control-plane only.
     """
 
-    def __init__(self, socket_path: str | Path, handler: RequestHandler) -> None:
+    def __init__(
+        self,
+        socket_path: str | Path,
+        handler: RequestHandler,
+        *,
+        socket_mode: int = 0o600,
+    ) -> None:
         self.socket_path = Path(socket_path)
         self.handler = handler
+        self.socket_mode = socket_mode
         self._sock: socket.socket | None = None
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -41,6 +49,7 @@ class ControlServer:
             self.socket_path.unlink()
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.bind(str(self.socket_path))
+        os.chmod(self.socket_path, self.socket_mode)
         sock.listen(20)
         sock.settimeout(0.2)
         self._sock = sock

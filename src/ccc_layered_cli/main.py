@@ -10,7 +10,7 @@ import socket
 from pathlib import Path
 from typing import Any
 
-from ccc_layered_cli import __version__
+from ccc_layered_cli import __version__, conda_shim
 from ccc_layered_cli import env as env_cli
 from ccc_layered_core.protocol import Request, decode_response, encode_request
 
@@ -144,6 +144,13 @@ def _socket_command(ns: argparse.Namespace) -> int:
     return 0
 
 
+def _init_conda_envs_command(ns: argparse.Namespace) -> int:
+    marker = conda_shim.init_conda_envs(ns.path)
+    result = {"path": str(Path(ns.path)), "marker": str(marker)}
+    _print_result(result, as_json=getattr(ns, "json", False))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="ccc-layered",
@@ -212,6 +219,14 @@ def main(argv: list[str] | None = None) -> int:
 
     # --- managed conda env transactions (phase-07) --------------------------
     env_cli.add_parsers(sub)
+
+    init_conda = sub.add_parser(
+        "init-conda-envs",
+        help="create a conda env observation marker in a folder",
+    )
+    init_conda.add_argument("path", help="conda envs folder to mark for observation")
+    init_conda.add_argument("--json", action="store_true")
+    init_conda.set_defaults(func=_init_conda_envs_command)
 
     for name in _NOT_IMPLEMENTED:
         sub.add_parser(name, help=f"not yet implemented ({_NOT_IMPLEMENTED[name]})")

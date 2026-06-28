@@ -1,0 +1,172 @@
+from __future__ import annotations
+
+import json
+import stat
+from pathlib import Path
+
+from ccc_layered_core.checksum import sha256_file
+from ccc_layered_core.manifest import ChildManifest, OverlayInfo, PackInfo, PackStack, dump_atomic
+from ccc_layered_core.protocol import Request
+from ccc_layered_mountd import childmount, daemon
+from ccc_layered_mountd.control import ControlServer
+from ccc_layered_mountd.daemon import MountdService
+from ccc_layered_pack.builder import BuildResult
+
+
+def _write_child(fake_nfs, *, child_id: str = "observe:env-a") -> ChildManifest:
+    pack = fake_nfs.subdir("packs") / "base.sqfs"
+    pack.write_bytes(b"base")
+    manifest = ChildManifest(
+        id=child_id,
+        name="env-a",
+        type="observed-child",
+        generation=0,
+        parent_path="env-a",
+        overlay=OverlayInfo(
+            mode="shared-overlay",
+            active_upper=str(fake_nfs.ccc_layered / "overlays" / "observe%3Aenv-a" / "active"),
+        ),
+        pack_stack=PackStack(lowers=(PackInfo(path=str(pack), sha256="a" * 64, size=4),)),
+    )
+    dump_atomic(fake_nfs.subdir("registry") / "env-a.toml", manifest)
+    return manifest
+
+
+class _FakeRwHandle:
+    command = ("fake-fuse-overlayfs",)
+
+    def __init__(self, mountpoint):
+        self.mountpoint = mountpoint
+        self.mounted = True
+
+    def unmount(self) -> None:
+        self.mounted = False
+
+
+def test_control_socket_mode_is_applied(tmp_path):
+    class Handler:
+        def dispatch(self, request):  # pragma: no cover - not reached
+            raise AssertionError(request)
+
+    sock = tmp_path / "run" / "mountd.sock"
+    server = ControlServer(sock, Handler(), socket_mode=0o660)
+    server.start()
+    try:
+        assert stat.S_IMODE(sock.stat().st_mode) == 0o660
+    finally:
+        server.stop()
+
+
+def test_commit_refuses_dirty_child_while_rw_mount_is_active(monkeypatch, fake_nfs, tmp_path):
+    def fake_mount_layered_rw(packs, overlay_paths, mountpoint, **kwargs):
+        return _FakeRwHandle(mountpoint)
+
+    def fake_build_delta(src, base_manifest, out, tombstones=None):  # pragma: no cover
+        out.write_bytes(b"delta")
+        return BuildResult(
+            pack=PackInfo(path=str(out), sha256=sha256_file(out), size=out.stat().st_size),
+            args=("fake",),
+        )
+
+    monkeypatch.setattr(childmount, "mount_layered_rw", fake_mount_layered_rw)
+    monkeypatch.setattr(daemon, "build_delta", fake_build_delta)
+    manifest = _write_child(fake_nfs)
+    service = MountdService(fake_nfs.ccc_layered, tmp_path / "run")
+    service.reload_registry()
+    service.mounts.mount_rw(manifest)
+    paths = service.overlay_paths(manifest)
+    paths.active_upper.mkdir(parents=True, exist_ok=True)
+    (paths.active_upper / "dirty.txt").write_text("dirty")
+
+    response = service.dispatch(Request(command="commit", path=manifest.id))
+
+    assert response.ok is False
+    assert response.code == "EBUSY"
+    assert "mounted" in response.error.lower()
+    assert (paths.active_upper / "dirty.txt").exists()
+
+
+def test_mountd_docker_artifacts_are_dedicated_service_container():
+    root = Path(__file__).resolve().parents[2]
+    dockerfile = root / "deploy" / "Dockerfile.mountd"
+    entrypoint = root / "deploy" / "mountd-entrypoint.sh"
+    smoke = root / "deploy" / "mountd-container-runtime-smoke.sh"
+
+    assert dockerfile.exists()
+    assert entrypoint.exists()
+    assert smoke.exists()
+
+    docker_text = dockerfile.read_text()
+    assert "ccc-layered-mountd" in docker_text
+    assert "make test" not in docker_text
+    assert ".[manifest,fuse]" in docker_text
+    assert "ENTRYPOINT" in docker_text
+    assert "HEALTHCHECK" in docker_text
+    assert "tini" in docker_text
+
+    entry_text = entrypoint.read_text()
+    for var in ("CCC_NFS_ROOT", "CCC_OBSERVE_ROOT", "CCC_OBSERVE_MOUNTPOINT"):
+        assert var in entry_text
+    assert "exec ccc-layered-mountd" in entry_text
+    assert "--observe-mountpoint" in entry_text
+    assert "--socket-mode" in entry_text
+    assert "/var/run/docker.sock" not in entry_text
+
+    smoke_text = smoke.read_text()
+    assert "ccc-layered-mountd-test" in smoke_text
+    assert "ccc-layered-app-test" in smoke_text
+    assert "bind-propagation=rshared" in smoke_text
+    assert "bind-propagation=rslave" in smoke_text
+    assert "--device /dev/fuse" in smoke_text
+    assert "--cap-add SYS_ADMIN" in smoke_text
+    app_section = smoke_text.split('--name "$app_name"', 1)[1]
+    assert "--cap-add SYS_ADMIN" not in app_section
+    assert "CCC_MOUNTD_SOCK" not in app_section
+
+
+def test_idle_mount_reaper_unmounts_released_mount(monkeypatch, fake_nfs, tmp_path):
+    def fake_mount_stack_ro(packs, mountpoint, prefer_kernel=False):
+        return _FakeRwHandle(mountpoint)
+
+    monkeypatch.setattr(childmount, "mount_stack_ro", fake_mount_stack_ro)
+    manifest = _write_child(fake_nfs)
+    service = MountdService(fake_nfs.ccc_layered, tmp_path / "run")
+    service.reload_registry()
+
+    service.handle_mount(manifest.id)
+    assert service.handle_status(manifest.id)["mounted"] is True
+    service.mounts.release(manifest.id)
+
+    assert service.reap_idle_mounts(0.0) == []
+    service.mounts._records[manifest.id].last_used -= 10
+    assert service.reap_idle_mounts(0.001) == [manifest.id]
+    assert service.handle_status(manifest.id)["mounted"] is False
+
+
+def test_ready_file_contains_doctor_json(fake_nfs, tmp_path):
+    service = MountdService(
+        fake_nfs.ccc_layered,
+        tmp_path / "run",
+        observe_mountpoint=tmp_path / "published",
+    )
+    ready = tmp_path / "status" / "ready.json"
+
+    daemon._write_ready_file(service, ready)
+
+    data = json.loads(ready.read_text())
+    assert data["nfs_root"] == str(fake_nfs.ccc_layered)
+    assert data["observation_mountpoint"] == str(tmp_path / "published")
+    assert data["active_submount_count"] == 0
+
+
+def test_mountd_cli_exposes_production_safety_flags():
+    text = Path(daemon.__file__).read_text()
+    for flag in (
+        "--socket-mode",
+        "--prefer-kernel",
+        "--observe-ready-timeout",
+        "--ready-file",
+        "--idle-unmount-ttl",
+        "--idle-reap-interval",
+    ):
+        assert flag in text
