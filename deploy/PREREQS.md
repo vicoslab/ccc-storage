@@ -176,6 +176,24 @@ by `unsquashfs` that the parent pack contains only parent files plus a
 mountd socket to mount the child directly at the parent boundary path and read
 both parent and child data through the combined tree.
 
+For the marker-driven observation model that replaces bespoke explicit nesting,
+run:
+
+```bash
+CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-observation-test \
+CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/domen.tabernik@fri.uni-lj.si/ccc-layered-storage-observation-test \
+deploy/observation-runtime-smoke.sh
+```
+
+This smoke places visible `CCC_LAYERED_OBSERVE` marker files at a root and a
+nested `user1/conda` directory, builds parent/child packs with
+`exclude_observed=True`, verifies that parent packs keep marker files and
+`.ccc-boundary` mountpoint stubs while excluding observed child payload, checks
+that child packs are stored in independent namespaces, then exercises
+`observe-mkdir`/`observe-access` through a real mountd socket. It asserts that
+zero children are mounted after registration and only the accessed nested child
+is mounted after access.
+
 By default the script isolates state under:
 
 ```text

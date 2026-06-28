@@ -8,13 +8,13 @@ FUSE/runtime concern.
 
 from __future__ import annotations
 
-import re
 import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from ccc_layered_core.manifest import ChildManifest
+from ccc_layered_core.names import safe_namespace_name
 from ccc_layered_core.resolve import resolve_owner_path
 
 
@@ -79,7 +79,7 @@ def route_path(
 
 
 def _safe_name(value: str) -> str:
-    return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_") or "child"
+    return safe_namespace_name(value)
 
 
 def _is_overlayfs_artifact(path: Path) -> bool:

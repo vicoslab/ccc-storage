@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ccc_layered_core.manifest import PackInfo
+from ccc_layered_core.names import safe_namespace_name
+from ccc_layered_core.observe import immediate_child_boundaries
 from ccc_layered_pack.verify import inspect_pack
 
 
@@ -27,7 +29,7 @@ _OVERLAY_WHITEOUT_RE = re.compile(r"^\.wh\..+")
 
 def safe_pack_name(child_id: str) -> str:
     """Filesystem-safe namespace for one managed child/root pack object set."""
-    return re.sub(r"[^A-Za-z0-9_.-]+", "_", child_id).strip("_") or "child"
+    return safe_namespace_name(child_id)
 
 
 def pack_object_dir(packs_root: str | Path, child_id: str) -> Path:
@@ -100,6 +102,27 @@ def plan_boundary_markers(boundaries: list[str] | None) -> BoundaryMarkerPlan:
     return BoundaryMarkerPlan(boundary_paths=paths, marker_files=markers)
 
 
+def _topmost(paths: tuple[str, ...]) -> tuple[str, ...]:
+    result: list[str] = []
+    for path in sorted(dict.fromkeys(paths), key=lambda item: (item.count("/"), item)):
+        if any(path == parent or path.startswith(parent + "/") for parent in result):
+            continue
+        result.append(path)
+    return tuple(result)
+
+
+def _combined_excludes(
+    src: str | Path,
+    explicit: list[str] | None,
+    *,
+    exclude_observed: bool,
+) -> list[str]:
+    paths = [item.strip("/") for item in (explicit or []) if item.strip("/")]
+    if exclude_observed:
+        paths.extend(immediate_child_boundaries(src))
+    return list(dict.fromkeys(paths))
+
+
 def create_boundary_markers(src: str | Path, boundaries: list[str] | None) -> list[Path]:
     """Create empty boundary dirs + marker files under *src*.
 
@@ -109,7 +132,8 @@ def create_boundary_markers(src: str | Path, boundaries: list[str] | None) -> li
     """
     root = Path(src)
     created: list[Path] = []
-    for boundary_path in plan_boundary_markers(boundaries).boundary_paths:
+    paths = _topmost(plan_boundary_markers(boundaries).boundary_paths)
+    for boundary_path in paths:
         boundary_dir = root / boundary_path
         boundary_dir.mkdir(parents=True, exist_ok=True)
         marker = boundary_dir / BOUNDARY_MARKER_NAME
@@ -123,6 +147,7 @@ def prepare_parent_source(
     dst: str | Path,
     *,
     exclude_boundaries: list[str] | None = None,
+    exclude_observed: bool = False,
 ) -> None:
     """Copy parent-owned files to *dst* and emit child-boundary stubs.
 
@@ -133,7 +158,7 @@ def prepare_parent_source(
     src_path = Path(src)
     dst_path = Path(dst)
     excludes = tuple(
-        item.strip("/") for item in (exclude_boundaries or []) if item.strip("/")
+        _combined_excludes(src_path, exclude_boundaries, exclude_observed=exclude_observed)
     )
     dst_path.mkdir(parents=True, exist_ok=True)
     for entry in sorted(src_path.rglob("*")):
@@ -152,10 +177,17 @@ def prepare_parent_source(
     create_boundary_markers(dst_path, list(excludes))
 
 
-def count_files(src: str | Path, *, exclude_boundaries: list[str] | None = None) -> int:
+def count_files(
+    src: str | Path,
+    *,
+    exclude_boundaries: list[str] | None = None,
+    exclude_observed: bool = False,
+) -> int:
     """Count regular files below *src*, excluding nested child-pack boundaries."""
     root = Path(src)
-    excludes = tuple(item.strip("/") for item in (exclude_boundaries or []))
+    excludes = tuple(
+        _combined_excludes(root, exclude_boundaries, exclude_observed=exclude_observed)
+    )
     count = 0
     for path in root.rglob("*"):
         rel = path.relative_to(root).as_posix()
@@ -195,6 +227,7 @@ def build_pack(
     comp: str = "zstd",
     block: str = "1M",
     exclude_boundaries: list[str] | None = None,
+    exclude_observed: bool = False,
 ) -> BuildResult:
     """Build a SquashFS pack from *src* into *out* using `mksquashfs`."""
     src_path = Path(src)
@@ -208,12 +241,17 @@ def build_pack(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="ccc-pack-src-") as tmp:
         pack_src = src_path
-        if exclude_boundaries:
+        excludes = _combined_excludes(
+            src_path,
+            exclude_boundaries,
+            exclude_observed=exclude_observed,
+        )
+        if excludes:
             pack_src = Path(tmp) / "parent"
             prepare_parent_source(
                 src_path,
                 pack_src,
-                exclude_boundaries=exclude_boundaries,
+                exclude_boundaries=excludes,
             )
         args = [
             exe,
@@ -234,7 +272,11 @@ def build_pack(
 
     inspected = inspect_pack(
         out_path,
-        file_count=count_files(src_path, exclude_boundaries=exclude_boundaries),
+        file_count=count_files(
+            src_path,
+            exclude_boundaries=exclude_boundaries,
+            exclude_observed=exclude_observed,
+        ),
     )
     info = PackInfo(
         path=str(out_path),

@@ -20,6 +20,7 @@ from ccc_layered_core.manifest import (
     dump_atomic,
     load_manifest,
 )
+from ccc_layered_core.names import safe_namespace_name
 from ccc_layered_core.protocol import Request, Response
 from ccc_layered_mountd import __version__
 from ccc_layered_mountd.childmount import ChildMountError, ChildMountManager
@@ -31,6 +32,7 @@ from ccc_layered_mountd.managed_parent import (
     ManagedParent,
     ManagedParentError,
 )
+from ccc_layered_mountd.observation import ObservationError, ObservationManager
 from ccc_layered_mountd.overlay import (
     OverlayPaths,
     cleanup_sealed,
@@ -66,6 +68,7 @@ class MountdService:
         *,
         prefer_kernel: bool = False,
         managed_parent: str | None = None,
+        observe_root: str | Path | None = None,
     ) -> None:
         self.nfs_root = Path(nfs_root)
         self.run_dir = Path(run_dir)
@@ -74,6 +77,7 @@ class MountdService:
         self.children: dict[str, ChildManifest] = {}
         self.manifest_paths: dict[str, Path] = {}
         self.parent: ManagedParent | None = None
+        self.observer: ObservationManager | None = None
         if managed_parent:
             self.parent = ManagedParent(
                 self.nfs_root,
@@ -81,6 +85,12 @@ class MountdService:
                 parent_path=managed_parent,
                 mounts=self.mounts,
                 prefer_kernel=prefer_kernel,
+            )
+        if observe_root:
+            self.observer = ObservationManager(
+                self.nfs_root,
+                observe_root,
+                self.mounts,
             )
 
     def reload_registry(self) -> None:
@@ -228,6 +238,20 @@ class MountdService:
     def handle_access(self, name: str) -> dict[str, Any]:
         return self._require_parent().access_child(name)
 
+    def _require_observer(self) -> ObservationManager:
+        if self.observer is None:
+            raise MountdError("no observation root configured on this mountd")
+        return self.observer
+
+    def handle_observe_ls(self) -> dict[str, Any]:
+        return self._require_observer().list_boundaries()
+
+    def handle_observe_mkdir(self, path: str) -> dict[str, Any]:
+        return self._require_observer().mkdir_child(path)
+
+    def handle_observe_access(self, path: str) -> dict[str, Any]:
+        return self._require_observer().access_child(path)
+
     def handle_doctor(self) -> dict[str, Any]:
         self.reload_registry()
         return {
@@ -283,6 +307,12 @@ class MountdService:
                 return Response(ok=True, result=self.handle_rmdir(request.path))
             if request.command == "access":
                 return Response(ok=True, result=self.handle_access(request.path))
+            if request.command == "observe-ls":
+                return Response(ok=True, result=self.handle_observe_ls())
+            if request.command == "observe-mkdir":
+                return Response(ok=True, result=self.handle_observe_mkdir(request.path))
+            if request.command == "observe-access":
+                return Response(ok=True, result=self.handle_observe_access(request.path))
             if request.command == "doctor":
                 return Response(ok=True, result=self.handle_doctor())
             return Response(ok=False, error=f"unknown command: {request.command}", code="EPROTO")
@@ -300,6 +330,8 @@ class MountdService:
             return Response(ok=False, error=str(exc), code="ENOTEMPTY")
         except MountdError as exc:
             return Response(ok=False, error=str(exc), code="EPROTO")
+        except ObservationError as exc:
+            return Response(ok=False, error=str(exc), code="ENOENT")
         except ManagedParentError as exc:
             return Response(ok=False, error=str(exc), code="EPERM")
         except PermissionError as exc:
@@ -353,7 +385,7 @@ class MountdService:
 
 
 def _safe_child_name(value: str) -> str:
-    return "".join(ch if ch.isalnum() or ch in "_.-" else "_" for ch in value).strip("_")
+    return safe_namespace_name(value)
 
 
 def _probe_summary_dict() -> dict[str, Any]:
@@ -410,6 +442,11 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("CCC_MANAGED_PARENT", ""),
         help="managed parent path whose children this node serves (e.g. /managed/dataset)",
     )
+    parser.add_argument(
+        "--observe-root",
+        default=os.environ.get("CCC_OBSERVE_ROOT", ""),
+        help="source tree whose CCC_LAYERED_OBSERVE markers define observed children",
+    )
     parser.add_argument("--once-doctor", action="store_true", help="print doctor JSON and exit")
     ns = parser.parse_args(argv)
 
@@ -424,6 +461,7 @@ def main(argv: list[str] | None = None) -> int:
         ns.nfs_root,
         ns.run_dir,
         managed_parent=ns.managed_parent or None,
+        observe_root=ns.observe_root or None,
     )
     service.reload_registry()
     if ns.once_doctor:

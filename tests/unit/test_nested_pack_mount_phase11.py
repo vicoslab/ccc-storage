@@ -9,7 +9,7 @@ from ccc_layered_core.manifest import (
 )
 from ccc_layered_mountd import childmount
 from ccc_layered_mountd.daemon import MountdService
-from ccc_layered_pack.builder import BOUNDARY_MARKER_NAME, pack_object_dir
+from ccc_layered_pack.builder import BOUNDARY_MARKER_NAME, pack_object_dir, safe_pack_name
 
 
 def _pack_info(path, payload: bytes) -> PackInfo:
@@ -24,8 +24,8 @@ def test_pack_object_dir_separates_root_and_nested_child_objects(fake_nfs):
     root_dir = pack_object_dir(packs, "user-root:alice")
     child_dir = pack_object_dir(packs, "conda-env:alice:env-a")
 
-    assert root_dir == packs / "user-root_alice"
-    assert child_dir == packs / "conda-env_alice_env-a"
+    assert root_dir == packs / safe_pack_name("user-root:alice")
+    assert child_dir == packs / safe_pack_name("conda-env:alice:env-a")
     assert child_dir != root_dir
     assert child_dir.parent == root_dir.parent
 
@@ -73,7 +73,7 @@ def test_mount_tree_mounts_nested_child_at_parent_boundary_path(monkeypatch, fak
         calls.append((tuple(pack.path for pack in packs_arg), mountpoint, prefer_kernel))
         # A real parent pack contains this stub directory; create it in the fake
         # parent mountpoint so the child mount can be targeted there.
-        if mountpoint.name == "user-root_alice":
+        if mountpoint.name == safe_pack_name("user-root:alice"):
             boundary = mountpoint / "conda" / "envs" / "env-a"
             boundary.mkdir(parents=True)
             (boundary / BOUNDARY_MARKER_NAME).write_text("")
@@ -84,7 +84,7 @@ def test_mount_tree_mounts_nested_child_at_parent_boundary_path(monkeypatch, fak
 
     result = service.handle_mount_tree(parent.id)
 
-    parent_mountpoint = tmp_path / "run" / "mounts" / "user-root_alice"
+    parent_mountpoint = tmp_path / "run" / "mounts" / safe_pack_name("user-root:alice")
     child_mountpoint = parent_mountpoint / "conda" / "envs" / "env-a"
     assert calls == [
         ((str(root_pack.path),), parent_mountpoint, False),

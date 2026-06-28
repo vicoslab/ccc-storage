@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ccc_layered_core.manifest import ChildBoundary, ChildManifest
 from ccc_layered_mountd.overlay import route_path
+from ccc_layered_pack.builder import safe_pack_name
 
 
 def _parent() -> ChildManifest:
@@ -23,7 +24,7 @@ def test_route_under_child_boundary_goes_to_child_overlay(tmp_path):
     assert route.owner_id == "env:env-a"
     assert route.inner_path == "lib/new.py"
     # The child overlay root is namespaced by the child id, not the parent.
-    assert "env_env-a" in str(route.overlay.root)
+    assert route.overlay.root.name == safe_pack_name("env:env-a")
 
 
 def test_route_outside_boundary_goes_to_parent_overlay(tmp_path):

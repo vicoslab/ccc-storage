@@ -3,7 +3,7 @@
 SquashFS-backed **layered storage** for the CCC compute cluster — a monorepo of
 five independently-buildable Python packages plus a shared test harness.
 
-> **Current status — Phase 09 CI/deploy foundation.**
+> **Current status — Phase 12 marker-observation foundation.**
 > Phase 00 created the safe dev/test harness. Phase 01 added immutable pack
 > metadata, TOML manifests, locks, checksums, and `ccc-pack`. Phase 02 added the
 > newline-JSON control protocol, node-local `MountdService`, Unix control
@@ -34,7 +34,14 @@ five independently-buildable Python packages plus a shared test harness.
 > remain later phases. Phase 09 adds the full CI matrix skeleton, coverage gate,
 > skip-with-reason conditional lanes, optional test Dockerfile, and safe host
 > deployment artifacts (`deploy/ccc-layered-mountd.service`, install/uninstall,
-> node prerequisites).
+> node prerequisites). Later runtime validation added real committed-stack
+> remount checks, real S3 cold-tier/HPC-exchange smokes, and explicit
+> hierarchical pack mountpoint validation. Phase 12 replaces bespoke explicit
+> nesting as the preferred model with visible `CCC_LAYERED_OBSERVE` markers:
+> any marked directory is an observation/interception root, every immediate
+> subdirectory below it is an independent SquashFS+overlay child namespace, and
+> `observe-mkdir`/`observe-access` model the future FUSE dispatcher's lazy
+> registration/access behavior without mounting all children upfront.
 
 ---
 
@@ -83,8 +90,8 @@ Entry points:
 | Command | Package | Status |
 |---|---|---|
 | `ccc-pack` | `ccc_layered_pack.cli:main` | implemented: `build`, `verify`, `manifest show` |
-| `ccc-layered-mountd` | `ccc_layered_mountd.daemon:main` | implemented: control socket + manifest/status/mount + managed-parent (`--managed-parent`) |
-| `ccc-layered` | `ccc_layered_cli.main:main` | implemented: `doctor`, `status`, `ls`, `mount`, `umount`, `commit`, `pin`, `parent-ls`, `create`, `rename`, `rmdir`, `access` |
+| `ccc-layered-mountd` | `ccc_layered_mountd.daemon:main` | implemented: control socket + manifest/status/mount + managed-parent (`--managed-parent`) + marker observation roots (`--observe-root`) |
+| `ccc-layered` | `ccc_layered_cli.main:main` | implemented: `doctor`, `status`, `ls`, `mount`, `umount`, `commit`, `pin`, `parent-ls`, `create`, `rename`, `rmdir`, `access`, `observe-ls`, `observe-mkdir`, `observe-access` |
 | `ccc-layered-hpc` | `ccc_layered_hpc.client:main` | foundation: `status`, explicit runtime-adapter stubs for `mount`/`push` |
 
 ---
@@ -148,6 +155,27 @@ python -c "from tests.fakes.capability import CAPS; print(CAPS)"
 | `CCC_NFS_ROOT` | Path to the (fake) `.ccc-layered` shared state | set per-test by the `fake_nfs` fixture |
 | `CCC_PROBE_TIMEOUT` | Per-probe timeout in seconds for the capability probe | `5` |
 | `CCC_MOUNTD_SOCK` | mountd control-socket path (used by `ccc-layered doctor`) | `/run/ccc-layered/mountd.sock` |
+| `CCC_OBSERVE_ROOT` | Source tree whose `CCC_LAYERED_OBSERVE` marker files define observation roots | unset |
+
+### Marker Observation Roots
+
+Explicit nested child-boundary manifests are now a compatibility layer, not the
+preferred authoring model. Place the visible marker file `CCC_LAYERED_OBSERVE`
+inside any directory that should become an observation/interception root. Every
+immediate subdirectory under that marker is an independent child mountpoint with
+its own manifest and `pack_object_dir` namespace. Observation roots can be
+recursive: a marker at `/storage/main` makes `/storage/main/user1` a child, and a
+marker at `/storage/main/user1/conda` makes
+`/storage/main/user1/conda/<env>` children inside the `user1` child. When paths
+overlap, the nearest/deepest observation root wins; sibling prefixes do not
+match.
+
+Pack builds can use `exclude_observed=True` to derive child boundaries directly
+from marker files. The parent pack keeps marker files and empty mountpoint stubs
+but excludes payload below observed child mountpoints. Runtime observation is
+lazy: `observe-mkdir` registers a child manifest and overlay without mounting
+it; `observe-access` mounts only the requested child. The pyfuse3 dispatcher
+remains a future adapter over this service/core model.
 
 ---
 
@@ -367,10 +395,31 @@ ccc-pack manifest show .scratch/registry/tree.toml
   text, deploy artifacts, optional Dockerfile semantics, and `--version` on all
   entry points.
 
+**Phase 12 marker-observation foundation complete:**
+
+- `ccc_layered_core.observe`: visible `CCC_LAYERED_OBSERVE` marker discovery,
+  immediate-child boundary enumeration, and deepest-observation-root path
+  resolution with sibling-prefix safety. Removing the marker removes the
+  observation root from discovery.
+- `ccc_layered_pack.builder.build_pack(..., exclude_observed=True)`: excludes
+  payload for observed child mountpoints, keeps user-visible observation marker
+  files, and emits only `.ccc-boundary` stubs at child mountpoints. Root/user/env
+  packs live in separate `packs/<safe-id>/` namespaces.
+- `ccc_layered_mountd.observation.ObservationManager`: service-level model for
+  the future FUSE dispatcher — `observe-mkdir` registers a child manifest and
+  overlay without mounting it; `observe-access` lazily mounts only the requested
+  committed child. Nested observation roots use the same mechanism as the root,
+  not a bespoke explicit nesting path.
+- `deploy/observation-runtime-smoke.sh`: privileged Docker/FUSE smoke that builds
+  root, user, and env packs from visible markers, verifies parent packs exclude
+  child payload by `unsquashfs`, and proves lazy access mounts only the touched
+  nested child.
+
 **Still out:** real conda/mamba/pip package installs and the conda transparency
 bucket (hardlink/symlink survival, baked shebangs, binary relocation, real `pip
 -e` round-trip) — gated behind the FUSE/real-runtime lanes (RK-8); the real
-pyfuse3 managed-parent/nested dispatcher binding (mount propagation into
+pyfuse3 managed-parent/observation-root dispatcher binding that intercepts live
+POSIX `mkdir`/lookup/readdir on the mounted root (mount propagation into
 containers, hot-path latency gate), real writable union mounting, real layered
 compaction merge (needs a mounted union view), boundary-scoped auto-commit wiring
 and child-gen pinning, real S3 backend wiring, real SSH/SLURM/HPC FUSE runtime

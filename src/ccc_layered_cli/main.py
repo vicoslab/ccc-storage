@@ -194,6 +194,16 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--json", action="store_true")
         p.set_defaults(func=_socket_command)
 
+    observe_ls = sub.add_parser("observe-ls", help="list marker-observed child boundaries")
+    observe_ls.add_argument("--json", action="store_true")
+    observe_ls.set_defaults(func=_socket_command)
+
+    for name in ("observe-mkdir", "observe-access"):
+        p = sub.add_parser(name, help=f"{name} a marker-observed child via mountd")
+        p.add_argument("path", help="path under an observation root")
+        p.add_argument("--json", action="store_true")
+        p.set_defaults(func=_socket_command)
+
     rename = sub.add_parser("rename", help="rename a managed-parent child via mountd")
     rename.add_argument("path", help="current child name")
     rename.add_argument("to", help="new child name")
