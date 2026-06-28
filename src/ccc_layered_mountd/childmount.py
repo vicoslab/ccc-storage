@@ -10,7 +10,8 @@ from typing import Any
 
 from ccc_layered_core.manifest import ChildManifest
 from ccc_layered_core.names import safe_namespace_name
-from ccc_layered_pack.reader import MountHandle, mount_stack_ro
+from ccc_layered_mountd.overlay import OverlayPaths
+from ccc_layered_pack.reader import MountHandle, mount_layered_rw, mount_stack_ro
 
 
 class ChildMountError(RuntimeError):
@@ -22,6 +23,7 @@ class MountRecord:
     manifest_id: str
     mountpoint: Path
     handle: MountHandle
+    mode: str = "ro"
     refcount: int = 1
     last_used: float = 0.0
 
@@ -30,6 +32,7 @@ class MountRecord:
             "manifest_id": self.manifest_id,
             "mountpoint": str(self.mountpoint),
             "mounted": self.handle.mounted,
+            "mode": self.mode,
             "refcount": self.refcount,
         }
 
@@ -66,12 +69,47 @@ class ChildMountManager:
             require_existing=False,
         )
 
+    def mount_rw(self, manifest: ChildManifest) -> MountRecord:
+        return self.mount_rw_at(
+            manifest,
+            self.mounts_dir / _safe_name(manifest.id),
+            require_existing=False,
+        )
+
+    def _reuse_existing(
+        self,
+        manifest: ChildManifest,
+        mountpoint: str | Path,
+        *,
+        mode: str,
+        increment_ref: bool = True,
+    ) -> MountRecord | None:
+        existing = self._records.get(manifest.id)
+        if not (existing and existing.handle.mounted):
+            return None
+        requested = Path(mountpoint)
+        if existing.mountpoint != requested:
+            raise ChildMountError(
+                f"manifest {manifest.id} is already mounted at "
+                f"{existing.mountpoint}, not requested mountpoint {requested}"
+            )
+        if existing.mode != mode:
+            raise ChildMountError(
+                f"manifest {manifest.id} is already mounted in {existing.mode} mode, "
+                f"not requested {mode} mode"
+            )
+        if increment_ref:
+            existing.refcount += 1
+        existing.last_used = self._clock()
+        return existing
+
     def mount_at(
         self,
         manifest: ChildManifest,
         mountpoint: str | Path,
         *,
         require_existing: bool = True,
+        increment_ref: bool = True,
     ) -> MountRecord:
         """Mount *manifest* at an explicit mountpoint.
 
@@ -79,16 +117,13 @@ class ChildMountManager:
         view. The boundary directory must already exist there; this prevents a
         missing parent stub from being silently created outside the root pack.
         """
-        existing = self._records.get(manifest.id)
-        if existing and existing.handle.mounted:
-            requested = Path(mountpoint)
-            if existing.mountpoint != requested:
-                raise ChildMountError(
-                    f"manifest {manifest.id} is already mounted at "
-                    f"{existing.mountpoint}, not requested mountpoint {requested}"
-                )
-            existing.refcount += 1
-            existing.last_used = self._clock()
+        existing = self._reuse_existing(
+            manifest,
+            mountpoint,
+            mode="ro",
+            increment_ref=increment_ref,
+        )
+        if existing is not None:
             return existing
         if not manifest.pack_stack.lowers:
             raise ChildMountError(f"manifest {manifest.id} has no pack lowers")
@@ -108,6 +143,59 @@ class ChildMountManager:
             manifest_id=manifest.id,
             mountpoint=mountpoint,
             handle=handle,
+            mode="ro",
+            last_used=self._clock(),
+        )
+        self._records[manifest.id] = record
+        return record
+
+    def mount_rw_at(
+        self,
+        manifest: ChildManifest,
+        mountpoint: str | Path,
+        *,
+        require_existing: bool = True,
+        prepare_mountpoint: bool = True,
+        increment_ref: bool = True,
+    ) -> MountRecord:
+        """Mount *manifest* as a writable shared-overlay child view."""
+        existing = self._reuse_existing(
+            manifest,
+            mountpoint,
+            mode="rw",
+            increment_ref=increment_ref,
+        )
+        if existing is not None:
+            return existing
+        mountpoint = Path(mountpoint)
+        if require_existing and not mountpoint.is_dir():
+            raise ChildMountError(
+                f"mountpoint for {manifest.id} is not an existing directory: {mountpoint}"
+            )
+        if not require_existing and prepare_mountpoint:
+            mountpoint.mkdir(parents=True, exist_ok=True)
+        active_upper = Path(manifest.overlay.active_upper)
+        if not manifest.overlay.active_upper:
+            raise ChildMountError(f"manifest {manifest.id} has no active overlay upper")
+        overlay_root = active_upper.parent
+        overlay_paths = OverlayPaths(
+            root=overlay_root,
+            active_upper=active_upper,
+            sealed_dir=overlay_root / "sealed",
+        )
+        handle = mount_layered_rw(
+            manifest.pack_stack.lowers,
+            overlay_paths,
+            mountpoint,
+            prefer_kernel=self.prefer_kernel,
+            stack_root=self.run_dir / "stacks" / _safe_name(manifest.id),
+            prepare_mountpoint=prepare_mountpoint,
+        )
+        record = MountRecord(
+            manifest_id=manifest.id,
+            mountpoint=mountpoint,
+            handle=handle,
+            mode="rw",
             last_used=self._clock(),
         )
         self._records[manifest.id] = record

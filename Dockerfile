@@ -7,9 +7,13 @@ WORKDIR /workspace/ccc-layered-storage
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        build-essential \
         fuse-overlayfs \
         fuse3 \
+        gcc \
+        libfuse3-dev \
         make \
+        pkg-config \
         squashfs-tools \
         squashfuse \
     && rm -rf /var/lib/apt/lists/*
@@ -22,6 +26,6 @@ COPY deploy ./deploy
 COPY Makefile ./
 
 RUN python -m pip install --upgrade pip \
-    && python -m pip install -e '.[dev,manifest,s3]'
+    && python -m pip install -e '.[dev,manifest,s3,fuse]'
 
 CMD ["sh", "-lc", "make test"]

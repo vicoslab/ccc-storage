@@ -7,7 +7,9 @@ import contextlib
 import os
 import shutil
 import signal
+import threading
 import time
+import traceback
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,7 @@ from ccc_layered_core.protocol import Request, Response
 from ccc_layered_mountd import __version__
 from ccc_layered_mountd.childmount import ChildMountError, ChildMountManager
 from ccc_layered_mountd.control import ControlServer
+from ccc_layered_mountd.dispatcher_fuse import mount_observation_dispatcher
 from ccc_layered_mountd.managed_parent import (
     ChildExistsError,
     ChildNotEmptyError,
@@ -252,6 +255,15 @@ class MountdService:
     def handle_observe_access(self, path: str) -> dict[str, Any]:
         return self._require_observer().access_child(path)
 
+    def handle_observe_access_at(self, path: str, mountpoint: str) -> dict[str, Any]:
+        return self._require_observer().access_child_at(path, mountpoint)
+
+    def handle_observe_rmdir(self, path: str) -> dict[str, Any]:
+        return self._require_observer().rmdir_child(path)
+
+    def handle_observe_rename(self, old_path: str, new_path: str) -> dict[str, Any]:
+        return self._require_observer().rename_child(old_path, new_path)
+
     def handle_doctor(self) -> dict[str, Any]:
         self.reload_registry()
         return {
@@ -447,6 +459,11 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("CCC_OBSERVE_ROOT", ""),
         help="source tree whose CCC_LAYERED_OBSERVE markers define observed children",
     )
+    parser.add_argument(
+        "--observe-mountpoint",
+        default=os.environ.get("CCC_OBSERVE_MOUNTPOINT", ""),
+        help="mount a live pyfuse3 observation dispatcher at this path",
+    )
     parser.add_argument("--once-doctor", action="store_true", help="print doctor JSON and exit")
     ns = parser.parse_args(argv)
 
@@ -464,6 +481,25 @@ def main(argv: list[str] | None = None) -> int:
         observe_root=ns.observe_root or None,
     )
     service.reload_registry()
+    if ns.observe_mountpoint:
+        if not ns.observe_root:
+            print("ccc-layered-mountd: --observe-mountpoint requires --observe-root")
+            return 2
+        Path(ns.observe_mountpoint).mkdir(parents=True, exist_ok=True)
+
+        def _run_observation_fuse() -> None:
+            try:
+                mount_observation_dispatcher(service, ns.observe_root, ns.observe_mountpoint)
+            except Exception as exc:
+                print(f"ccc-layered-mountd: observation dispatcher failed: {exc}", flush=True)
+                traceback.print_exc()
+                os._exit(3)
+
+        threading.Thread(
+            target=_run_observation_fuse,
+            name="ccc-layered-observe-fuse",
+            daemon=True,
+        ).start()
     if ns.once_doctor:
         import json
 

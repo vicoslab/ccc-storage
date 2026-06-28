@@ -112,14 +112,19 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
 
 def test_dockerfile_is_optional_test_image_only():
     text = (ROOT / "Dockerfile").read_text()
+    pyproject = (ROOT / "pyproject.toml").read_text()
     assert "ccc-layered-storage" in text
     assert "make test" in text
-    assert ".[dev,manifest,s3]" in text
+    assert ".[dev,manifest,s3,fuse]" in text
+    assert "pyfuse3" in pyproject
+    assert "trio" in pyproject
     assert "COPY deploy ./deploy" in text
     assert "COPY .github ./.github" in text
     assert "Dockerfile ./" in text
     assert "squashfs-tools" in text
     assert "squashfuse" in text
     assert "fuse3" in text
+    assert "libfuse3-dev" in text
+    assert "pkg-config" in text
     assert "make" in text
     assert "production" not in text.lower()

@@ -3,7 +3,7 @@
 SquashFS-backed **layered storage** for the CCC compute cluster — a monorepo of
 five independently-buildable Python packages plus a shared test harness.
 
-> **Current status — Phase 12 marker-observation foundation.**
+> **Current status — Phase 13 live marker-observation FUSE dispatcher.**
 > Phase 00 created the safe dev/test harness. Phase 01 added immutable pack
 > metadata, TOML manifests, locks, checksums, and `ccc-pack`. Phase 02 added the
 > newline-JSON control protocol, node-local `MountdService`, Unix control
@@ -41,7 +41,12 @@ five independently-buildable Python packages plus a shared test harness.
 > any marked directory is an observation/interception root, every immediate
 > subdirectory below it is an independent SquashFS+overlay child namespace, and
 > `observe-mkdir`/`observe-access` model the future FUSE dispatcher's lazy
-> registration/access behavior without mounting all children upfront.
+> registration/access behavior without mounting all children upfront. Phase 13
+> adds the live pyfuse3 observation dispatcher: `mkdir` creates generation-0
+> writable child views, repeated lookups are idempotent automount triggers,
+> conservative `rmdir`/`rename` only operate on clean unmounted generation-0
+> children, and the privileged Docker/FUSE smoke validates write → commit →
+> unmount/remount against real `fuse-overlayfs`.
 
 ---
 
@@ -174,8 +179,25 @@ Pack builds can use `exclude_observed=True` to derive child boundaries directly
 from marker files. The parent pack keeps marker files and empty mountpoint stubs
 but excludes payload below observed child mountpoints. Runtime observation is
 lazy: `observe-mkdir` registers a child manifest and overlay without mounting
-it; `observe-access` mounts only the requested child. The pyfuse3 dispatcher
-remains a future adapter over this service/core model.
+it; `observe-access` mounts only the requested child. The live pyfuse3 dispatcher
+serves the observation root as a transparent directory: `mkdir` below the root
+creates a generation-0 writable child, the first lookup/opendir below a child
+triggers a node-local mount in the background, and commit publishes the overlay
+as the next SquashFS delta generation.
+
+Privileged runtime validation requires Docker, `/dev/fuse`, and bind access to a
+scratch runtime root:
+
+```bash
+CCC_RUNTIME_KEEP=1 \
+CCC_OBSERVATION_FUSE_TIMEOUT=300 \
+CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<user>/ccc-layered-storage-observation-fuse-test \
+deploy/observation-fuse-runtime-smoke.sh
+```
+
+The smoke builds the deploy image with `.[fuse]`, starts `ccc-layered-mountd`
+with `--observe-mountpoint`, validates generation-0 write through the live FUSE
+view, commits to SquashFS, remounts, and reads the committed payload back.
 
 ---
 

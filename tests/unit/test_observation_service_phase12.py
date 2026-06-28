@@ -79,11 +79,11 @@ def test_observe_access_mounts_only_requested_child_and_nested_roots_work(
 ):
     calls = []
 
-    def fake_mount_stack_ro(packs, mountpoint, prefer_kernel=False):
-        calls.append((tuple(pack.path for pack in packs), mountpoint))
+    def fake_mount_layered_rw(packs, overlay_paths, mountpoint, prefer_kernel=False, **kwargs):
+        calls.append((tuple(pack.path for pack in packs), overlay_paths, mountpoint))
         return FakeHandle(mountpoint)
 
-    monkeypatch.setattr(childmount, "mount_stack_ro", fake_mount_stack_ro)
+    monkeypatch.setattr(childmount, "mount_layered_rw", fake_mount_layered_rw)
     source = tmp_path / "source"
     source.mkdir()
     (source / OBSERVE_MARKER_NAME).write_text("")
@@ -132,3 +132,34 @@ def test_observe_access_mounts_only_requested_child_and_nested_roots_work(
     assert mounted["mounted"] is True
     assert service.mounts.active_ids() == ["observe:user1/conda/env-a"]
     assert len(calls) == 1
+
+
+def test_observe_access_generation0_child_mounts_writable_upper_without_pack(
+    monkeypatch,
+    fake_nfs,
+    tmp_path,
+):
+    calls = []
+
+    def fake_mount_layered_rw(packs, overlay_paths, mountpoint, prefer_kernel=False, **kwargs):
+        calls.append((tuple(packs), overlay_paths, mountpoint, prefer_kernel))
+        return FakeHandle(mountpoint)
+
+    monkeypatch.setattr(childmount, "mount_layered_rw", fake_mount_layered_rw, raising=False)
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / OBSERVE_MARKER_NAME).write_text("")
+
+    service = MountdService(
+        nfs_root=fake_nfs.ccc_layered,
+        run_dir=tmp_path / "run",
+        observe_root=source,
+    )
+    service.handle_observe_mkdir("new-env")
+
+    mounted = service.handle_observe_access("new-env/bin/python")
+
+    assert mounted["id"] == "observe:new-env"
+    assert mounted["mounted"] is True
+    assert len(calls) == 1
+    assert calls[0][0] == ()

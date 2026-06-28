@@ -6,12 +6,21 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from ccc_layered_core.manifest import PackInfo
 
 
 class PackReadError(RuntimeError):
     """Raised when mounting or extracting a pack fails."""
+
+
+class OverlayPathLike(Protocol):
+    @property
+    def root(self) -> Path: ...
+
+    @property
+    def active_upper(self) -> Path: ...
 
 
 @dataclass
@@ -37,6 +46,21 @@ class MountHandle:
 
 @dataclass
 class StackMountHandle(MountHandle):
+    lower_handles: tuple[MountHandle, ...] = ()
+    stack_root: Path | None = None
+
+    def unmount(self) -> None:
+        super().unmount()
+        for handle in reversed(self.lower_handles):
+            handle.unmount()
+        if self.stack_root is not None:
+            shutil.rmtree(self.stack_root, ignore_errors=True)
+
+
+@dataclass
+class WritableLayerMountHandle(MountHandle):
+    """Writable fuse-overlayfs mount over committed lowers plus shared upper."""
+
     lower_handles: tuple[MountHandle, ...] = ()
     stack_root: Path | None = None
 
@@ -126,6 +150,71 @@ def mount_stack_ro(
         for handle in reversed(lower_handles):
             handle.unmount()
         shutil.rmtree(stack_root, ignore_errors=True)
+        raise
+
+
+def mount_layered_rw(
+    packs: tuple[PackInfo, ...] | list[PackInfo],
+    overlay_paths: OverlayPathLike,
+    mountpoint: str | Path,
+    *,
+    prefer_kernel: bool = False,
+    stack_root: str | Path | None = None,
+    prepare_mountpoint: bool = True,
+) -> WritableLayerMountHandle:
+    """Mount a writable child view over committed lowers plus shared upper.
+
+    Generation-0 children have no packs, so they use an empty lower directory and
+    the same shared overlay upper/workdir. Pack-backed children first mount the
+    committed stack read-only, then use it as the fuse-overlayfs lowerdir.
+    """
+    fuse_overlayfs = shutil.which("fuse-overlayfs")
+    if not fuse_overlayfs:
+        raise PackReadError("fuse-overlayfs not found; cannot mount writable layered view")
+
+    mnt = Path(mountpoint)
+    if prepare_mountpoint:
+        mnt.mkdir(parents=True, exist_ok=True)
+    overlay_root = Path(overlay_paths.root)
+    upper = Path(overlay_paths.active_upper)
+    work = overlay_root / "work"
+    upper.mkdir(parents=True, exist_ok=True)
+    work.mkdir(parents=True, exist_ok=True)
+
+    scratch_root = (
+        Path(stack_root) if stack_root is not None else mnt.parent / f".{mnt.name}.rw-stack"
+    )
+    if scratch_root.exists():
+        shutil.rmtree(scratch_root)
+    scratch_root.mkdir(parents=True, exist_ok=True)
+
+    lower_handles: list[MountHandle] = []
+    try:
+        if packs:
+            lower_mnt = scratch_root / "lower"
+            lower_handles.append(mount_stack_ro(packs, lower_mnt, prefer_kernel=prefer_kernel))
+            lowerdir = str(lower_handles[0].mountpoint)
+        else:
+            empty_lower = scratch_root / "empty-lower"
+            empty_lower.mkdir(parents=True, exist_ok=True)
+            lowerdir = str(empty_lower)
+
+        opts = f"lowerdir={lowerdir},upperdir={upper},workdir={work}"
+        cmd = [fuse_overlayfs, "-o", opts, str(mnt)]
+        cp = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if cp.returncode != 0:
+            msg = cp.stderr.strip() or cp.stdout.strip()
+            raise PackReadError(f"writable layered mount failed ({cp.returncode}): {msg}")
+        return WritableLayerMountHandle(
+            mountpoint=mnt,
+            command=tuple(cmd),
+            lower_handles=tuple(lower_handles),
+            stack_root=scratch_root,
+        )
+    except Exception:
+        for handle in reversed(lower_handles):
+            handle.unmount()
+        shutil.rmtree(scratch_root, ignore_errors=True)
         raise
 
 

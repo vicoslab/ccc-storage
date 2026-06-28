@@ -20,6 +20,8 @@ s3 = ["boto3>=1.26"]
 # Manifest (de)serialisation lands in phase-01; tomllib is stdlib on 3.11 for
 # reads, tomli-w is needed for atomic writes.
 manifest = ["tomli-w>=1.0"]
+# Live observation-root FUSE dispatcher.
+fuse = ["pyfuse3>=3.2", "trio>=0.22"]
 # Developer / test tooling. The canonical, pinned set lives in environment.yml
 # (the ccc-dev conda env); this extra is a pip fallback for CI runners.
 dev = [
