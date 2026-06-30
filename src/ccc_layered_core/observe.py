@@ -7,8 +7,11 @@ are nested, the deepest matching observation root owns paths below it.
 
 from __future__ import annotations
 
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+
+from ccc_layered_core.manifest import normalize_write_policy
 
 OBSERVE_MARKER_NAME = "CCC_LAYERED_OBSERVE"
 
@@ -17,6 +20,7 @@ OBSERVE_MARKER_NAME = "CCC_LAYERED_OBSERVE"
 class ObservationRoot:
     path: Path
     relative_path: str
+    write_policy: str | None = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +53,19 @@ def _is_prefix(prefix: str, path: str) -> bool:
     return path == prefix or path.startswith(prefix + "/")
 
 
+def parse_observe_marker_policy(marker: str | Path) -> str | None:
+    """Return optional default write policy encoded in an observe marker."""
+
+    text = Path(marker).read_text(encoding="utf-8").strip()
+    if not text:
+        return None
+    if "=" not in text and "\n" not in text:
+        return normalize_write_policy(text)
+    data = tomllib.loads(text)
+    value = data.get("write_policy")
+    return None if value is None else normalize_write_policy(str(value))
+
+
 def discover_observation_roots(src: str | Path) -> tuple[ObservationRoot, ...]:
     """Return directories under *src* that contain the visible observe marker."""
     root = Path(src)
@@ -57,7 +74,13 @@ def discover_observation_roots(src: str | Path) -> tuple[ObservationRoot, ...]:
     roots: list[ObservationRoot] = []
     marker_at_root = root / OBSERVE_MARKER_NAME
     if marker_at_root.is_file():
-        roots.append(ObservationRoot(path=root, relative_path=""))
+        roots.append(
+            ObservationRoot(
+                path=root,
+                relative_path="",
+                write_policy=parse_observe_marker_policy(marker_at_root),
+            )
+        )
     for marker in sorted(root.rglob(OBSERVE_MARKER_NAME)):
         if marker == marker_at_root or not marker.is_file():
             continue
@@ -66,6 +89,7 @@ def discover_observation_roots(src: str | Path) -> tuple[ObservationRoot, ...]:
             ObservationRoot(
                 path=parent,
                 relative_path=parent.relative_to(root).as_posix(),
+                write_policy=parse_observe_marker_policy(marker),
             )
         )
     return tuple(

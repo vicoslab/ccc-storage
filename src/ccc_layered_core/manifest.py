@@ -11,6 +11,26 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 
+WRITE_POLICY_SHARED_NFS = "shared-nfs"
+WRITE_POLICY_LOCAL_SSD_ASYNC = "local-ssd-async"
+VALID_WRITE_POLICIES = frozenset(
+    {
+        WRITE_POLICY_SHARED_NFS,
+        WRITE_POLICY_LOCAL_SSD_ASYNC,
+    }
+)
+_WRITE_POLICY_ALIASES = {
+    "": WRITE_POLICY_SHARED_NFS,
+    "shared": WRITE_POLICY_SHARED_NFS,
+    "shared-overlay": WRITE_POLICY_SHARED_NFS,
+    "nfs": WRITE_POLICY_SHARED_NFS,
+    "nfs-upper": WRITE_POLICY_SHARED_NFS,
+    "local": WRITE_POLICY_LOCAL_SSD_ASYNC,
+    "local-async": WRITE_POLICY_LOCAL_SSD_ASYNC,
+    "ssd": WRITE_POLICY_LOCAL_SSD_ASYNC,
+    "local-ssd": WRITE_POLICY_LOCAL_SSD_ASYNC,
+}
+
 
 class ManifestError(ValueError):
     """Base class for manifest validation/load errors."""
@@ -18,6 +38,17 @@ class ManifestError(ValueError):
 
 class UnsupportedSchemaVersion(ManifestError):
     """Raised when a manifest is newer than this implementation."""
+
+
+def normalize_write_policy(value: str | None) -> str:
+    """Return canonical write-policy name or raise ``ManifestError``."""
+
+    raw = "" if value is None else str(value).strip().lower()
+    policy = _WRITE_POLICY_ALIASES.get(raw, raw)
+    if policy not in VALID_WRITE_POLICIES:
+        valid = ", ".join(sorted(VALID_WRITE_POLICIES))
+        raise ManifestError(f"invalid write_policy {value!r}; expected one of: {valid}")
+    return policy
 
 
 @dataclass(frozen=True)
@@ -168,6 +199,7 @@ class ChildManifest:
     created_ts: str = ""
     pinned: bool = False
     commit_mode: str = "auto"
+    write_policy: str = WRITE_POLICY_SHARED_NFS
     pack_stack: PackStack = field(default_factory=PackStack)
     overlay: OverlayInfo = field(default_factory=OverlayInfo)
     s3: S3Info = field(default_factory=S3Info)
@@ -192,6 +224,9 @@ class ChildManifest:
             data["pinned"] = self.pinned
         if self.commit_mode and self.commit_mode != "auto":
             data["commit_mode"] = self.commit_mode
+        write_policy = normalize_write_policy(self.write_policy)
+        if write_policy != WRITE_POLICY_SHARED_NFS:
+            data["write_policy"] = write_policy
         data["pack_stack"] = self.pack_stack.to_dict()
         data["overlay"] = self.overlay.to_dict()
         data["s3"] = self.s3.to_dict()
@@ -221,6 +256,9 @@ class ChildManifest:
             created_ts=str(data.get("created_ts", "")),
             pinned=bool(data.get("pinned", False)),
             commit_mode=str(data.get("commit_mode", "auto")),
+            write_policy=normalize_write_policy(
+                data.get("write_policy", WRITE_POLICY_SHARED_NFS)
+            ),
             pack_stack=PackStack.from_dict(data.get("pack_stack")),
             overlay=OverlayInfo.from_dict(data.get("overlay")),
             s3=S3Info.from_dict(data.get("s3")),
@@ -311,6 +349,7 @@ def _dumps_toml_subset(data: dict[str, Any]) -> str:
         "created_ts",
         "pinned",
         "commit_mode",
+        "write_policy",
     ):
         if key in data:
             lines.append(f"{key} = {_scalar(data[key])}")

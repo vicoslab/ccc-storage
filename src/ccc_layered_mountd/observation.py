@@ -8,11 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from ccc_layered_core.manifest import (
+    WRITE_POLICY_SHARED_NFS,
     ChildManifest,
     OverlayInfo,
     PackStack,
     dump_atomic,
     load_manifest,
+    normalize_write_policy,
 )
 from ccc_layered_core.observe import immediate_child_boundaries, resolve_observed_child
 from ccc_layered_mountd.childmount import ChildMountManager
@@ -37,10 +39,13 @@ class ObservationManager:
         nfs_root: str | Path,
         source_root: str | Path,
         mounts: ChildMountManager,
+        *,
+        default_write_policy: str = WRITE_POLICY_SHARED_NFS,
     ) -> None:
         self.nfs_root = Path(nfs_root)
         self.source_root = Path(source_root)
         self.mounts = mounts
+        self.default_write_policy = normalize_write_policy(default_write_policy)
         self.registry_dir = self.nfs_root / "registry" / "observe"
         self.overlays_root = self.nfs_root / "overlays"
 
@@ -95,6 +100,7 @@ class ObservationManager:
                 ),
                 overlay_generation=0,
             ),
+            write_policy=observed.observation_root.write_policy or self.default_write_policy,
         )
         dump_atomic(manifest_path, manifest)
         return self._status(manifest)
@@ -215,6 +221,7 @@ class ObservationManager:
             "type": manifest.type,
             "parent_path": manifest.parent_path,
             "generation": manifest.generation,
+            "write_policy": manifest.write_policy,
             "state": state,
             "mounted": bool(mount_status["mounted"]),
             "mountpoint": mount_status["mountpoint"],

@@ -22,6 +22,9 @@ class OverlayPathLike(Protocol):
     @property
     def active_upper(self) -> Path: ...
 
+    @property
+    def work(self) -> Path: ...
+
 
 @dataclass
 class MountHandle:
@@ -216,6 +219,156 @@ def mount_layered_rw(
             handle.unmount()
         shutil.rmtree(scratch_root, ignore_errors=True)
         raise
+
+
+def mount_layered_rw_kernel_overlay(
+    packs: tuple[PackInfo, ...] | list[PackInfo],
+    local_paths: OverlayPathLike,
+    mountpoint: str | Path,
+    *,
+    prefer_kernel: bool = True,
+    stack_root: str | Path | None = None,
+    prepare_mountpoint: bool = True,
+) -> WritableLayerMountHandle:
+    """Mount a writable child view with kernel OverlayFS and local upper/work."""
+
+    mount_bin = shutil.which("mount")
+    if not mount_bin:
+        raise PackReadError("mount not found; cannot use kernel OverlayFS")
+    mnt = Path(mountpoint)
+    if prepare_mountpoint:
+        mnt.mkdir(parents=True, exist_ok=True)
+    upper = Path(local_paths.active_upper)
+    work = Path(local_paths.work)
+    upper.mkdir(parents=True, exist_ok=True)
+    work.mkdir(parents=True, exist_ok=True)
+    scratch_root = (
+        Path(stack_root)
+        if stack_root is not None
+        else mnt.parent / f".{mnt.name}.kernel-rw-stack"
+    )
+    if scratch_root.exists():
+        shutil.rmtree(scratch_root)
+    scratch_root.mkdir(parents=True, exist_ok=True)
+
+    lower_handles: list[MountHandle] = []
+    try:
+        if packs:
+            lowers_root = scratch_root / "lowers"
+            lowers_root.mkdir(parents=True, exist_ok=True)
+            for idx, pack in enumerate(packs):
+                lower_mnt = lowers_root / f"{idx:04d}"
+                lower_mnt.mkdir(parents=True, exist_ok=True)
+                lower_handles.append(mount_ro(pack.path, lower_mnt, prefer_kernel=prefer_kernel))
+            lowerdir = ":".join(str(handle.mountpoint) for handle in reversed(lower_handles))
+        else:
+            empty_lower = scratch_root / "empty-lower"
+            empty_lower.mkdir(parents=True, exist_ok=True)
+            lowerdir = str(empty_lower)
+        opts = f"lowerdir={lowerdir},upperdir={upper},workdir={work}"
+        cmd = [mount_bin, "-t", "overlay", "overlay", "-o", opts, str(mnt)]
+        cp = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if cp.returncode != 0:
+            msg = cp.stderr.strip() or cp.stdout.strip()
+            raise PackReadError(f"kernel overlay mount failed ({cp.returncode}): {msg}")
+        return WritableLayerMountHandle(
+            mountpoint=mnt,
+            command=tuple(cmd),
+            lower_handles=tuple(lower_handles),
+            stack_root=scratch_root,
+        )
+    except Exception:
+        for handle in reversed(lower_handles):
+            handle.unmount()
+        shutil.rmtree(scratch_root, ignore_errors=True)
+        raise
+
+
+def mount_dirs_and_packs_ro(
+    top_dirs: tuple[str | Path, ...] | list[str | Path],
+    packs: tuple[PackInfo, ...] | list[PackInfo],
+    mountpoint: str | Path,
+    *,
+    prefer_kernel: bool = False,
+    stack_root: str | Path | None = None,
+    prepare_mountpoint: bool = True,
+) -> StackMountHandle:
+    """Mount read-only directory layers over a committed pack stack."""
+
+    fuse_overlayfs = shutil.which("fuse-overlayfs")
+    if not fuse_overlayfs:
+        raise PackReadError("fuse-overlayfs not found; cannot compose read-only dir/pack stack")
+    mnt = Path(mountpoint)
+    if prepare_mountpoint:
+        mnt.mkdir(parents=True, exist_ok=True)
+    scratch_root = (
+        Path(stack_root)
+        if stack_root is not None
+        else mnt.parent / f".{mnt.name}.dir-pack-stack"
+    )
+    if scratch_root.exists():
+        shutil.rmtree(scratch_root)
+    scratch_root.mkdir(parents=True, exist_ok=True)
+    lower_handles: list[MountHandle] = []
+    try:
+        lowerdirs = [str(Path(item)) for item in top_dirs]
+        if packs:
+            lowers_root = scratch_root / "lowers"
+            lowers_root.mkdir(parents=True, exist_ok=True)
+            for idx, pack in enumerate(packs):
+                lower_mnt = lowers_root / f"{idx:04d}"
+                lower_mnt.mkdir(parents=True, exist_ok=True)
+                lower_handles.append(mount_ro(pack.path, lower_mnt, prefer_kernel=prefer_kernel))
+            lowerdirs.extend(str(handle.mountpoint) for handle in reversed(lower_handles))
+        if not lowerdirs:
+            raise PackReadError("cannot mount an empty read-only stack")
+        cmd = [fuse_overlayfs, "-o", f"lowerdir={':'.join(lowerdirs)}", str(mnt)]
+        cp = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if cp.returncode != 0:
+            msg = cp.stderr.strip() or cp.stdout.strip()
+            raise PackReadError(f"dir/pack stack mount failed ({cp.returncode}): {msg}")
+        return StackMountHandle(
+            mountpoint=mnt,
+            command=tuple(cmd),
+            lower_handles=tuple(lower_handles),
+            stack_root=scratch_root,
+        )
+    except Exception:
+        for handle in reversed(lower_handles):
+            handle.unmount()
+        shutil.rmtree(scratch_root, ignore_errors=True)
+        raise
+
+
+def mount_bind_ro(
+    source: str | Path,
+    mountpoint: str | Path,
+    *,
+    prepare_mountpoint: bool = True,
+) -> MountHandle:
+    """Bind-mount a published logical mirror read-only."""
+
+    mount_bin = shutil.which("mount")
+    if not mount_bin:
+        raise PackReadError("mount not found; cannot bind-mount published mirror")
+    src = Path(source)
+    if not src.is_dir():
+        raise PackReadError(f"bind source is not a directory: {src}")
+    mnt = Path(mountpoint)
+    if prepare_mountpoint:
+        mnt.mkdir(parents=True, exist_ok=True)
+    cmd = [mount_bin, "--bind", str(src), str(mnt)]
+    cp = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if cp.returncode != 0:
+        msg = cp.stderr.strip() or cp.stdout.strip()
+        raise PackReadError(f"bind mount failed ({cp.returncode}): {msg}")
+    ro_cmd = [mount_bin, "-o", "remount,ro,bind", str(mnt)]
+    ro_cp = subprocess.run(ro_cmd, capture_output=True, text=True, check=False)
+    if ro_cp.returncode != 0:
+        MountHandle(mountpoint=mnt, command=tuple(cmd)).unmount()
+        msg = ro_cp.stderr.strip() or ro_cp.stdout.strip()
+        raise PackReadError(f"bind read-only remount failed ({ro_cp.returncode}): {msg}")
+    return MountHandle(mountpoint=mnt, command=tuple(cmd))
 
 
 def extract(pack: str | Path, dest: str | Path, *, subpath: str | None = None) -> None:

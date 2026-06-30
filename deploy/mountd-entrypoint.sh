@@ -16,9 +16,17 @@ CCC_MOUNTD_READY_FILE="${CCC_MOUNTD_READY_FILE:-${CCC_NODE_RUN_DIR}/ready.json}"
 CCC_OBSERVE_READY_TIMEOUT="${CCC_OBSERVE_READY_TIMEOUT:-10}"
 CCC_IDLE_UNMOUNT_TTL="${CCC_IDLE_UNMOUNT_TTL:-300}"
 CCC_IDLE_REAP_INTERVAL="${CCC_IDLE_REAP_INTERVAL:-30}"
+CCC_DEFAULT_WRITE_POLICY="${CCC_DEFAULT_WRITE_POLICY:-shared-nfs}"
+CCC_LOCAL_OVERLAY_ROOT="${CCC_LOCAL_OVERLAY_ROOT:-${CCC_NODE_RUN_DIR}/local-overlays}"
+CCC_DIRTY_PUBLISH_INTERVAL="${CCC_DIRTY_PUBLISH_INTERVAL:-1}"
 CCC_MOUNTD_EXTRA_ARGS="${CCC_MOUNTD_EXTRA_ARGS:-}"
 
-mkdir -p "$CCC_NFS_ROOT" "$CCC_NODE_RUN_DIR" "$CCC_OBSERVE_ROOT" "$CCC_OBSERVE_MOUNTPOINT"
+mkdir -p \
+  "$CCC_NFS_ROOT" \
+  "$CCC_NODE_RUN_DIR" \
+  "$CCC_LOCAL_OVERLAY_ROOT" \
+  "$CCC_OBSERVE_ROOT" \
+  "$CCC_OBSERVE_MOUNTPOINT"
 
 if [ ! -c /dev/fuse ]; then
   echo "ccc-layered-mountd: /dev/fuse is not available as a character device" >&2
@@ -52,6 +60,9 @@ exec ccc-layered-mountd \
   --observe-ready-timeout "$CCC_OBSERVE_READY_TIMEOUT" \
   --idle-unmount-ttl "$CCC_IDLE_UNMOUNT_TTL" \
   --idle-reap-interval "$CCC_IDLE_REAP_INTERVAL" \
+  --default-write-policy "$CCC_DEFAULT_WRITE_POLICY" \
+  --local-overlay-root "$CCC_LOCAL_OVERLAY_ROOT" \
+  --dirty-publish-interval "$CCC_DIRTY_PUBLISH_INTERVAL" \
   --observe-root "$CCC_OBSERVE_ROOT" \
   --observe-mountpoint "$CCC_OBSERVE_MOUNTPOINT" \
   $CCC_MOUNTD_EXTRA_ARGS

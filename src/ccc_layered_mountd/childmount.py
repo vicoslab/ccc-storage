@@ -2,16 +2,41 @@
 
 from __future__ import annotations
 
+import shutil
+import socket
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ccc_layered_core.manifest import ChildManifest
+from ccc_layered_core.locks import LockHeld, NFSLock
+from ccc_layered_core.manifest import (
+    WRITE_POLICY_LOCAL_SSD_ASYNC,
+    WRITE_POLICY_SHARED_NFS,
+    ChildManifest,
+    normalize_write_policy,
+)
 from ccc_layered_core.names import safe_namespace_name
-from ccc_layered_mountd.overlay import OverlayPaths
-from ccc_layered_pack.reader import MountHandle, mount_layered_rw, mount_stack_ro
+from ccc_layered_mountd.overlay import (
+    DirtyMirror,
+    LocalOverlayPaths,
+    OverlayPaths,
+    dirty_mirror_paths,
+    dirty_stats,
+    latest_dirty_mirror,
+    local_overlay_paths,
+    publish_logical_mirror,
+)
+from ccc_layered_pack.reader import (
+    MountHandle,
+    mount_bind_ro,
+    mount_dirs_and_packs_ro,
+    mount_layered_rw,
+    mount_layered_rw_kernel_overlay,
+    mount_stack_ro,
+)
 
 
 class ChildMountError(RuntimeError):
@@ -24,8 +49,12 @@ class MountRecord:
     mountpoint: Path
     handle: MountHandle
     mode: str = "ro"
+    write_policy: str = WRITE_POLICY_SHARED_NFS
     refcount: int = 1
     last_used: float = 0.0
+    writer_lock: NFSLock | None = None
+    local_paths: LocalOverlayPaths | None = None
+    base_generation: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -33,6 +62,7 @@ class MountRecord:
             "mountpoint": str(self.mountpoint),
             "mounted": self.handle.mounted,
             "mode": self.mode,
+            "write_policy": self.write_policy,
             "refcount": self.refcount,
         }
 
@@ -53,14 +83,26 @@ class ChildMountManager:
         run_dir: str | Path,
         *,
         prefer_kernel: bool = False,
+        nfs_root: str | Path | None = None,
+        local_overlay_root: str | Path | None = None,
+        node_id: str | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.run_dir = Path(run_dir)
         self.prefer_kernel = prefer_kernel
+        self.nfs_root = Path(nfs_root) if nfs_root is not None else None
+        self.local_overlay_root = (
+            Path(local_overlay_root)
+            if local_overlay_root is not None
+            else self.run_dir / "local-overlays"
+        )
+        self.node_id = node_id or socket.gethostname()
         self.mounts_dir = self.run_dir / "mounts"
         self.mounts_dir.mkdir(parents=True, exist_ok=True)
         self._clock = clock
         self._records: dict[str, MountRecord] = {}
+        self._publish_lock = threading.RLock()
+        self._mount_lock = threading.RLock()
 
     def mount(self, manifest: ChildManifest) -> MountRecord:
         return self.mount_at(
@@ -98,12 +140,33 @@ class ChildMountManager:
                 f"manifest {manifest.id} is already mounted in {existing.mode} mode, "
                 f"not requested {mode} mode"
             )
+        if existing.write_policy != manifest.write_policy:
+            raise ChildMountError(
+                f"manifest {manifest.id} is already mounted with "
+                f"{existing.write_policy} policy, not manifest policy {manifest.write_policy}"
+            )
         if increment_ref:
             existing.refcount += 1
         existing.last_used = self._clock()
         return existing
 
     def mount_at(
+        self,
+        manifest: ChildManifest,
+        mountpoint: str | Path,
+        *,
+        require_existing: bool = True,
+        increment_ref: bool = True,
+    ) -> MountRecord:
+        with self._mount_lock:
+            return self._mount_at_unlocked(
+                manifest,
+                mountpoint,
+                require_existing=require_existing,
+                increment_ref=increment_ref,
+            )
+
+    def _mount_at_unlocked(
         self,
         manifest: ChildManifest,
         mountpoint: str | Path,
@@ -144,6 +207,7 @@ class ChildMountManager:
             mountpoint=mountpoint,
             handle=handle,
             mode="ro",
+            write_policy=manifest.write_policy,
             last_used=self._clock(),
         )
         self._records[manifest.id] = record
@@ -158,7 +222,25 @@ class ChildMountManager:
         prepare_mountpoint: bool = True,
         increment_ref: bool = True,
     ) -> MountRecord:
-        """Mount *manifest* as a writable shared-overlay child view."""
+        with self._mount_lock:
+            return self._mount_rw_at_unlocked(
+                manifest,
+                mountpoint,
+                require_existing=require_existing,
+                prepare_mountpoint=prepare_mountpoint,
+                increment_ref=increment_ref,
+            )
+
+    def _mount_rw_at_unlocked(
+        self,
+        manifest: ChildManifest,
+        mountpoint: str | Path,
+        *,
+        require_existing: bool = True,
+        prepare_mountpoint: bool = True,
+        increment_ref: bool = True,
+    ) -> MountRecord:
+        """Mount *manifest* as a writable child view using its write policy."""
         existing = self._reuse_existing(
             manifest,
             mountpoint,
@@ -167,6 +249,31 @@ class ChildMountManager:
         )
         if existing is not None:
             return existing
+        policy = normalize_write_policy(manifest.write_policy)
+        if policy == WRITE_POLICY_SHARED_NFS:
+            return self._mount_rw_shared_nfs(
+                manifest,
+                mountpoint,
+                require_existing=require_existing,
+                prepare_mountpoint=prepare_mountpoint,
+            )
+        if policy == WRITE_POLICY_LOCAL_SSD_ASYNC:
+            return self._mount_rw_local_ssd_async(
+                manifest,
+                mountpoint,
+                require_existing=require_existing,
+                prepare_mountpoint=prepare_mountpoint,
+            )
+        raise ChildMountError(f"unsupported write policy for {manifest.id}: {policy}")
+
+    def _mount_rw_shared_nfs(
+        self,
+        manifest: ChildManifest,
+        mountpoint: str | Path,
+        *,
+        require_existing: bool,
+        prepare_mountpoint: bool,
+    ) -> MountRecord:
         mountpoint = Path(mountpoint)
         if require_existing and not mountpoint.is_dir():
             raise ChildMountError(
@@ -196,10 +303,184 @@ class ChildMountManager:
             mountpoint=mountpoint,
             handle=handle,
             mode="rw",
+            write_policy=WRITE_POLICY_SHARED_NFS,
             last_used=self._clock(),
+            base_generation=manifest.generation,
         )
         self._records[manifest.id] = record
         return record
+
+    def _writer_lock_path(self, manifest_id: str) -> Path:
+        if self.nfs_root is None:
+            raise ChildMountError("local-ssd-async requires ChildMountManager nfs_root")
+        return self.nfs_root / "locks" / f"{_safe_name(manifest_id)}.local-writer.lock"
+
+    def writer_lock_path(self, manifest_id: str) -> Path:
+        return self._writer_lock_path(manifest_id)
+
+    def mount_lock(self):
+        return self._mount_lock
+
+    def _hydrate_local_upper_from_latest_mirror(
+        self,
+        manifest: ChildManifest,
+        local_paths: LocalOverlayPaths,
+    ) -> None:
+        upper_has_content = (
+            local_paths.active_upper.exists() and any(local_paths.active_upper.iterdir())
+        )
+        if self.nfs_root is None or upper_has_content:
+            return
+        latest = latest_dirty_mirror(self.nfs_root, manifest.id)
+        if latest is None:
+            return
+        if local_paths.active_upper.exists():
+            shutil.rmtree(local_paths.active_upper)
+        shutil.copytree(latest.path, local_paths.active_upper, symlinks=True)
+
+    def _mount_published_mirror_ro(
+        self,
+        manifest: ChildManifest,
+        mountpoint: str | Path,
+        *,
+        prepare_mountpoint: bool,
+    ) -> MountRecord:
+        if self.nfs_root is None:
+            raise ChildMountError("local-ssd-async requires ChildMountManager nfs_root")
+        latest = latest_dirty_mirror(self.nfs_root, manifest.id)
+        if latest is None:
+            if manifest.pack_stack.lowers:
+                return self._mount_at_unlocked(
+                    manifest,
+                    mountpoint,
+                    require_existing=False,
+                    increment_ref=False,
+                )
+            raise ChildMountError(
+                f"local writer lock is held for {manifest.id} and no published mirror exists"
+            )
+        mnt = Path(mountpoint)
+        if manifest.pack_stack.lowers:
+            handle = mount_dirs_and_packs_ro(
+                (latest.path,),
+                manifest.pack_stack.lowers,
+                mnt,
+                prefer_kernel=False,
+                stack_root=self.run_dir / "stacks" / f"{_safe_name(manifest.id)}.mirror",
+                prepare_mountpoint=prepare_mountpoint,
+            )
+        else:
+            handle = mount_bind_ro(latest.path, mnt, prepare_mountpoint=prepare_mountpoint)
+        record = MountRecord(
+            manifest_id=manifest.id,
+            mountpoint=mnt,
+            handle=handle,
+            mode="ro",
+            write_policy=WRITE_POLICY_LOCAL_SSD_ASYNC,
+            last_used=self._clock(),
+            base_generation=manifest.generation,
+        )
+        self._records[manifest.id] = record
+        return record
+
+    def _mount_rw_local_ssd_async(
+        self,
+        manifest: ChildManifest,
+        mountpoint: str | Path,
+        *,
+        require_existing: bool,
+        prepare_mountpoint: bool,
+    ) -> MountRecord:
+        if self.nfs_root is None:
+            raise ChildMountError("local-ssd-async requires ChildMountManager nfs_root")
+        mountpoint = Path(mountpoint)
+        if require_existing and not mountpoint.is_dir():
+            raise ChildMountError(
+                f"mountpoint for {manifest.id} is not an existing directory: {mountpoint}"
+            )
+        lock = NFSLock(self._writer_lock_path(manifest.id), op="local-writer")
+        try:
+            lock.acquire()
+        except LockHeld:
+            return self._mount_published_mirror_ro(
+                manifest,
+                mountpoint,
+                prepare_mountpoint=prepare_mountpoint,
+            )
+        local_paths = local_overlay_paths(self.local_overlay_root, manifest.id)
+        local_paths.root.mkdir(parents=True, exist_ok=True)
+        self._hydrate_local_upper_from_latest_mirror(manifest, local_paths)
+        try:
+            handle = mount_layered_rw_kernel_overlay(
+                manifest.pack_stack.lowers,
+                local_paths,
+                mountpoint,
+                prefer_kernel=False,
+                stack_root=self.run_dir / "stacks" / f"{_safe_name(manifest.id)}.local",
+                prepare_mountpoint=prepare_mountpoint,
+            )
+        except Exception:
+            lock.release()
+            raise
+        record = MountRecord(
+            manifest_id=manifest.id,
+            mountpoint=mountpoint,
+            handle=handle,
+            mode="rw",
+            write_policy=WRITE_POLICY_LOCAL_SSD_ASYNC,
+            last_used=self._clock(),
+            writer_lock=lock,
+            local_paths=local_paths,
+            base_generation=manifest.generation,
+        )
+        self._records[manifest.id] = record
+        return record
+
+    def _publish_record(self, record: MountRecord) -> DirtyMirror | None:
+        with self._publish_lock:
+            if (
+                record.write_policy != WRITE_POLICY_LOCAL_SSD_ASYNC
+                or record.mode != "rw"
+                or record.writer_lock is None
+                or self.nfs_root is None
+            ):
+                return None
+            try:
+                record.writer_lock.heartbeat()
+            except Exception:
+                pass
+            if record.local_paths is None or not record.local_paths.active_upper.is_dir():
+                return None
+            stats = dirty_stats(record.local_paths.active_upper)
+            if not stats.dirty:
+                return None
+            return publish_logical_mirror(
+                record.local_paths.active_upper,
+                dirty_mirror_paths(self.nfs_root, record.manifest_id),
+                child_id=record.manifest_id,
+                node_id=self.node_id,
+                base_generation=record.base_generation,
+            )
+
+    def publish_dirty(self, manifest_id: str) -> DirtyMirror | None:
+        record = self._records.get(manifest_id)
+        if record is None:
+            return None
+        return self._publish_record(record)
+
+    def publish_all_dirty(self) -> list[DirtyMirror]:
+        published: list[DirtyMirror] = []
+        for record in list(self._records.values()):
+            mirror = self._publish_record(record)
+            if mirror is not None:
+                published.append(mirror)
+        return published
+
+    def cleanup_local_child(self, manifest_id: str) -> None:
+        """Remove node-local SSD dirty state for a child after durable commit/abort."""
+
+        paths = local_overlay_paths(self.local_overlay_root, manifest_id)
+        shutil.rmtree(paths.root, ignore_errors=True)
 
     def unmount(self, manifest_id: str) -> dict[str, Any]:
         record = self._records.get(manifest_id)
@@ -207,10 +488,25 @@ class ChildMountManager:
             return {"mounted": False, "refcount": 0, "mountpoint": ""}
         record.refcount -= 1
         if record.refcount <= 0:
+            self._publish_record(record)
             record.handle.unmount()
+            if record.writer_lock is not None:
+                record.writer_lock.release()
             self._records.pop(manifest_id, None)
             return {"mounted": False, "refcount": 0, "mountpoint": str(record.mountpoint)}
         return record.to_dict()
+
+    def force_unmount(self, manifest_id: str) -> dict[str, Any]:
+        """Unmount a child regardless of refcount and forget its record."""
+
+        record = self._records.pop(manifest_id, None)
+        if record is None:
+            return {"mounted": False, "refcount": 0, "mountpoint": ""}
+        self._publish_record(record)
+        record.handle.unmount()
+        if record.writer_lock is not None:
+            record.writer_lock.release()
+        return {"mounted": False, "refcount": 0, "mountpoint": str(record.mountpoint)}
 
     def release(self, manifest_id: str) -> dict[str, Any]:
         """Drop one open handle without unmounting.
@@ -241,7 +537,10 @@ class ChildMountManager:
             if record.refcount > 0:
                 continue
             if current - record.last_used >= ttl:
+                self._publish_record(record)
                 record.handle.unmount()
+                if record.writer_lock is not None:
+                    record.writer_lock.release()
                 self._records.pop(manifest_id, None)
                 expired.append(manifest_id)
         return expired
@@ -262,7 +561,10 @@ class ChildMountManager:
     def stop_all(self) -> None:
         for manifest_id in reversed(list(self._records)):
             record = self._records.pop(manifest_id)
+            self._publish_record(record)
             record.handle.unmount()
+            if record.writer_lock is not None:
+                record.writer_lock.release()
 
 
 class NestedMountManager:

@@ -12,6 +12,7 @@ from typing import Any
 
 from ccc_layered_cli import __version__, conda_shim
 from ccc_layered_cli import env as env_cli
+from ccc_layered_core.manifest import VALID_WRITE_POLICIES
 from ccc_layered_core.protocol import Request, decode_response, encode_request
 
 DEFAULT_SOCKET = "/run/ccc-layered/mountd.sock"
@@ -50,7 +51,8 @@ def _request(
     if not Path(sock_path).exists():
         return 2, {"error": f"mountd not reachable on this node: {sock_path}", "code": "ENOSOCK"}
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.settimeout(5.0)
+    timeout = float(os.environ.get("CCC_MOUNTD_REQUEST_TIMEOUT", "60"))
+    sock.settimeout(timeout)
     try:
         sock.connect(sock_path)
         sock.sendall(encode_request(Request(command=command, path=path, payload=payload or {})))
@@ -133,6 +135,10 @@ def _socket_command(ns: argparse.Namespace) -> int:
         payload["to"] = ns.to
     if ns.cmd == "pin":
         payload["pinned"] = not getattr(ns, "clear", False)
+    if ns.cmd == "write-policy":
+        if getattr(ns, "policy", None):
+            payload["policy"] = ns.policy
+        payload["remount"] = bool(getattr(ns, "remount", False))
     code, result = _request(ns.cmd, path=getattr(ns, "path", ""), payload=payload)
     if code != 0:
         if getattr(ns, "json", False):
@@ -145,7 +151,7 @@ def _socket_command(ns: argparse.Namespace) -> int:
 
 
 def _init_conda_envs_command(ns: argparse.Namespace) -> int:
-    marker = conda_shim.init_conda_envs(ns.path)
+    marker = conda_shim.init_conda_envs(ns.path, write_policy=getattr(ns, "write_policy", None))
     result = {"path": str(Path(ns.path)), "marker": str(marker)}
     _print_result(result, as_json=getattr(ns, "json", False))
     return 0
@@ -168,6 +174,11 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--json", action="store_true")
         p.set_defaults(func=_socket_command)
 
+    publish = sub.add_parser("publish", help="publish local-ssd-async dirty mirror via mountd")
+    publish.add_argument("path", nargs="?", default="")
+    publish.add_argument("--json", action="store_true")
+    publish.set_defaults(func=_socket_command)
+
     commit = sub.add_parser("commit", help="commit a dirty shared overlay via mountd")
     commit.add_argument("path")
     commit.add_argument("-m", "--message", default="")
@@ -185,6 +196,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     pin.add_argument("--json", action="store_true")
     pin.set_defaults(func=_socket_command)
+
+    write_policy = sub.add_parser(
+        "write-policy",
+        help="get or set a child write policy, optionally remounting on this node",
+    )
+    write_policy.add_argument("path")
+    write_policy.add_argument("policy", nargs="?", choices=sorted(VALID_WRITE_POLICIES))
+    write_policy.add_argument(
+        "--remount",
+        action="store_true",
+        help="if mounted locally, unmount and remount the child with the new policy",
+    )
+    write_policy.add_argument("--json", action="store_true")
+    write_policy.set_defaults(func=_socket_command)
 
     list_cmd = sub.add_parser("ls", help="list managed children via mountd")
     list_cmd.add_argument("--json", action="store_true")
@@ -225,6 +250,11 @@ def main(argv: list[str] | None = None) -> int:
         help="create a conda env observation marker in a folder",
     )
     init_conda.add_argument("path", help="conda envs folder to mark for observation")
+    init_conda.add_argument(
+        "--write-policy",
+        choices=sorted(VALID_WRITE_POLICIES),
+        help="default write policy for children created below this observation root",
+    )
     init_conda.add_argument("--json", action="store_true")
     init_conda.set_defaults(func=_init_conda_envs_command)
 

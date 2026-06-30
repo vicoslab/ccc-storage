@@ -15,13 +15,17 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from ccc_layered_core.locks import NFSLock
+from ccc_layered_core.locks import LockHeld, NFSLock
 from ccc_layered_core.manifest import (
+    VALID_WRITE_POLICIES,
+    WRITE_POLICY_LOCAL_SSD_ASYNC,
+    WRITE_POLICY_SHARED_NFS,
     ChildManifest,
     OverlayInfo,
     PackStack,
     dump_atomic,
     load_manifest,
+    normalize_write_policy,
 )
 from ccc_layered_core.names import safe_namespace_name
 from ccc_layered_core.protocol import Request, Response
@@ -39,9 +43,12 @@ from ccc_layered_mountd.managed_parent import (
 from ccc_layered_mountd.observation import ObservationError, ObservationManager
 from ccc_layered_mountd.overlay import (
     OverlayPaths,
+    cleanup_dirty_mirror,
     cleanup_sealed,
     dirty_stats,
     ensure_active_upper,
+    latest_dirty_mirror,
+    local_overlay_paths,
     seal_active_upper,
 )
 from ccc_layered_mountd.workers.compaction import plan_compaction
@@ -74,11 +81,21 @@ class MountdService:
         managed_parent: str | None = None,
         observe_root: str | Path | None = None,
         observe_mountpoint: str | Path | None = None,
+        default_write_policy: str = WRITE_POLICY_SHARED_NFS,
+        local_overlay_root: str | Path | None = None,
+        node_id: str | None = None,
     ) -> None:
         self.nfs_root = Path(nfs_root)
         self.run_dir = Path(run_dir)
+        self.default_write_policy = normalize_write_policy(default_write_policy)
         self.registry_dir = self.nfs_root / "registry"
-        self.mounts = ChildMountManager(self.run_dir, prefer_kernel=prefer_kernel)
+        self.mounts = ChildMountManager(
+            self.run_dir,
+            prefer_kernel=prefer_kernel,
+            nfs_root=self.nfs_root,
+            local_overlay_root=local_overlay_root,
+            node_id=node_id,
+        )
         self.children: dict[str, ChildManifest] = {}
         self.manifest_paths: dict[str, Path] = {}
         self.parent: ManagedParent | None = None
@@ -97,6 +114,7 @@ class MountdService:
                 self.nfs_root,
                 observe_root,
                 self.mounts,
+                default_write_policy=self.default_write_policy,
             )
 
     def reload_registry(self) -> None:
@@ -181,6 +199,13 @@ class MountdService:
                 f"cannot commit {manifest.id} while its writable child view is still mounted; "
                 "unmount/drain it first"
             )
+
+        if manifest.write_policy == WRITE_POLICY_LOCAL_SSD_ASYNC:
+            return self._commit_local_async(selector, message=message)
+        return self._commit_shared_nfs(selector, message=message)
+
+    def _commit_shared_nfs(self, selector: str, *, message: str = "") -> dict[str, Any]:
+        manifest = self._find(selector)
         paths = self.overlay_paths(manifest)
         ensure_active_upper(paths)
         stats = dirty_stats(paths.active_upper)
@@ -195,33 +220,97 @@ class MountdService:
             ensure_active_upper(paths)
             new_generation = manifest.generation + 1
             sealed = seal_active_upper(paths, generation=new_generation)
-            delta_dir = pack_object_dir(self.nfs_root / "packs", manifest.id)
-            delta_dir.mkdir(parents=True, exist_ok=True)
-            delta_pack = delta_dir / f"delta-g{new_generation:04d}.sqfs"
-            result = build_delta(sealed.path, manifest, delta_pack)
-            verify_pack(delta_pack, result.pack)
-            updated = replace(
-                manifest,
-                generation=new_generation,
-                state="clean",
-                pack_stack=PackStack(
-                    active_revision=f"g{new_generation}",
-                    lowers=(*manifest.pack_stack.lowers, result.pack),
-                ),
-                overlay=OverlayInfo(
-                    mode="shared-overlay",
-                    active_upper=str(paths.active_upper),
-                    overlay_generation=manifest.overlay.overlay_generation + 1,
-                ),
-            )
-            manifest_path = self.manifest_paths[manifest.id]
-            dump_atomic(manifest_path, updated)
-            cleanup_sealed(sealed)
-            self.reload_registry()
-            committed = self.children[updated.id]
-            committed_status = self._manifest_status(committed)
-            committed_status["message"] = message
-            return committed_status
+            try:
+                return self._build_commit_from_source(
+                    manifest,
+                    sealed.path,
+                    new_generation=new_generation,
+                    message=message,
+                    overlay_mode="shared-overlay",
+                    cleanup=lambda: cleanup_sealed(sealed),
+                )
+            except Exception:
+                cleanup_sealed(sealed)
+                raise
+
+    def _commit_local_async(self, selector: str, *, message: str = "") -> dict[str, Any]:
+        manifest = self._find(selector)
+        latest = latest_dirty_mirror(self.nfs_root, manifest.id)
+        if latest is None or (latest.file_count == 0 and latest.bytes == 0):
+            return self._manifest_status(replace(manifest, state="clean"))
+        writer_lock = NFSLock(self.mounts.writer_lock_path(manifest.id), op="commit-local")
+        try:
+            writer_lock.acquire()
+        except LockHeld as exc:
+            raise ChildMountError(
+                f"cannot commit {manifest.id}: local writer lock is held; "
+                "unmount/drain writer first"
+            ) from exc
+        try:
+            lock_path = self.nfs_root / "locks" / f"{_safe_child_name(manifest.id)}.commit.lock"
+            with NFSLock(lock_path, op="commit"):
+                manifest = self._find(selector)
+                latest = latest_dirty_mirror(self.nfs_root, manifest.id)
+                if latest is None or (latest.file_count == 0 and latest.bytes == 0):
+                    return self._manifest_status(replace(manifest, state="clean"))
+                if latest.base_generation != manifest.generation:
+                    raise ChildMountError(
+                        f"cannot commit {manifest.id}: dirty mirror base generation "
+                        f"{latest.base_generation} != manifest generation {manifest.generation}"
+                    )
+                return self._build_commit_from_source(
+                    manifest,
+                    latest.path,
+                    new_generation=manifest.generation + 1,
+                    message=message,
+                    overlay_mode=WRITE_POLICY_LOCAL_SSD_ASYNC,
+                    cleanup=lambda: self._cleanup_local_async_state(manifest.id),
+                )
+        finally:
+            writer_lock.release()
+
+    def _cleanup_local_async_state(self, manifest_id: str) -> None:
+        cleanup_dirty_mirror(self.nfs_root, manifest_id)
+        self.mounts.cleanup_local_child(manifest_id)
+
+    def _build_commit_from_source(
+        self,
+        manifest: ChildManifest,
+        source: Path,
+        *,
+        new_generation: int,
+        message: str,
+        overlay_mode: str,
+        cleanup,
+    ) -> dict[str, Any]:
+        delta_dir = pack_object_dir(self.nfs_root / "packs", manifest.id)
+        delta_dir.mkdir(parents=True, exist_ok=True)
+        delta_pack = delta_dir / f"delta-g{new_generation:04d}.sqfs"
+        result = build_delta(source, manifest, delta_pack)
+        verify_pack(delta_pack, result.pack)
+        paths = self.overlay_paths(manifest)
+        updated = replace(
+            manifest,
+            generation=new_generation,
+            state="clean",
+            pack_stack=PackStack(
+                active_revision=f"g{new_generation}",
+                lowers=(*manifest.pack_stack.lowers, result.pack),
+            ),
+            overlay=OverlayInfo(
+                mode=overlay_mode,
+                active_upper=str(paths.active_upper),
+                overlay_generation=manifest.overlay.overlay_generation + 1,
+            ),
+        )
+        manifest_path = self.manifest_paths[manifest.id]
+        dump_atomic(manifest_path, updated)
+        cleanup()
+        self.reload_registry()
+        committed = self.children[updated.id]
+        committed_status = self._manifest_status(committed)
+        committed_status["message"] = message
+        return committed_status
 
     def handle_pin(self, selector: str, *, pinned: bool) -> dict[str, Any]:
         manifest = self._find(selector)
@@ -229,6 +318,79 @@ class MountdService:
         dump_atomic(self.manifest_paths[manifest.id], updated)
         self.reload_registry()
         return self._manifest_status(self.children[updated.id])
+
+    def _assert_clean_for_write_policy_switch(self, manifest: ChildManifest) -> None:
+        paths = self.overlay_paths(manifest)
+        ensure_active_upper(paths)
+        stats = dirty_stats(paths.active_upper)
+        if stats.dirty:
+            raise ChildMountError(
+                f"cannot switch write policy for dirty child {manifest.id}; commit or discard first"
+            )
+        latest = latest_dirty_mirror(self.nfs_root, manifest.id)
+        if latest is not None and latest.file_count > 0:
+            raise ChildMountError(
+                f"cannot switch write policy for dirty local-async child {manifest.id}; "
+                "commit or discard published mirror first"
+            )
+        local_paths = local_overlay_paths(self.mounts.local_overlay_root, manifest.id)
+        local_stats = dirty_stats(local_paths.active_upper)
+        if local_stats.dirty:
+            raise ChildMountError(
+                f"cannot switch write policy for dirty local-async child {manifest.id}; "
+                "commit or discard local SSD upper first"
+            )
+
+    def handle_write_policy(
+        self,
+        selector: str,
+        *,
+        policy: str | None = None,
+        remount: bool = False,
+    ) -> dict[str, Any]:
+        with self.mounts.mount_lock():
+            manifest = self._find(selector)
+            if policy is None:
+                return self._manifest_status(manifest)
+            next_policy = normalize_write_policy(policy)
+            if manifest.write_policy == next_policy:
+                return self._manifest_status(manifest)
+
+            self._assert_clean_for_write_policy_switch(manifest)
+
+            mount_status = self.mounts.status(manifest)
+            was_mounted = bool(mount_status.get("mounted"))
+            mountpoint = mount_status.get("mountpoint", "")
+            mode = mount_status.get("mode", "")
+            if was_mounted and not remount:
+                raise ChildMountError(
+                    f"cannot switch write policy for mounted child {manifest.id}; use --remount"
+                )
+            if was_mounted:
+                self.mounts.force_unmount(manifest.id)
+
+            updated = replace(manifest, write_policy=next_policy)
+            dump_atomic(self.manifest_paths[manifest.id], updated)
+            self.reload_registry()
+            updated = self.children[updated.id]
+
+            if was_mounted and mountpoint:
+                if mode == "rw":
+                    self.mounts.mount_rw_at(
+                        updated,
+                        mountpoint,
+                        require_existing=False,
+                        prepare_mountpoint=False,
+                        increment_ref=False,
+                    )
+                elif mode == "ro" and updated.pack_stack.lowers:
+                    self.mounts.mount_at(
+                        updated,
+                        mountpoint,
+                        require_existing=False,
+                        increment_ref=False,
+                    )
+            return self._manifest_status(updated)
 
     def _require_parent(self) -> ManagedParent:
         if self.parent is None:
@@ -286,6 +448,7 @@ class MountdService:
                 self.observe_mountpoint and _is_mountpoint(self.observe_mountpoint)
             ),
             "runtime": _probe_summary_dict(),
+            "default_write_policy": self.default_write_policy,
         }
 
     def reap_idle_mounts(self, ttl: float) -> list[str]:
@@ -293,6 +456,22 @@ class MountdService:
         if ttl <= 0:
             return []
         return self.mounts.idle_unmount_expired(ttl)
+
+    @staticmethod
+    def _mirror_dict(mirror) -> dict[str, Any]:
+        return mirror.__dict__ | {"path": str(mirror.path)}
+
+    def publish_dirty_epochs(self) -> list[dict[str, Any]]:
+        """Publish async dirty mirrors for locally mounted local-ssd writers."""
+
+        return [self._mirror_dict(mirror) for mirror in self.mounts.publish_all_dirty()]
+
+    def handle_publish(self, selector: str | None = None) -> dict[str, Any]:
+        if selector:
+            manifest = self._find(selector)
+            mirror = self.mounts.publish_dirty(manifest.id)
+            return {"published": [] if mirror is None else [self._mirror_dict(mirror)]}
+        return {"published": self.publish_dirty_epochs()}
 
     def dispatch(self, request: Request) -> Response:
         try:
@@ -314,12 +493,23 @@ class MountdService:
                         message=str(request.payload.get("message", "")),
                     ),
                 )
+            if request.command == "publish":
+                return Response(ok=True, result=self.handle_publish(request.path or None))
             if request.command == "pin":
                 return Response(
                     ok=True,
                     result=self.handle_pin(
                         request.path,
                         pinned=bool(request.payload.get("pinned", True)),
+                    ),
+                )
+            if request.command == "write-policy":
+                return Response(
+                    ok=True,
+                    result=self.handle_write_policy(
+                        request.path,
+                        policy=request.payload.get("policy"),
+                        remount=bool(request.payload.get("remount", False)),
                     ),
                 )
             if request.command == "parent-ls":
@@ -379,9 +569,55 @@ class MountdService:
         mount_status = self.mounts.status(manifest)
         paths = self.overlay_paths(manifest)
         ensure_active_upper(paths)
-        stats = dirty_stats(paths.active_upper)
-        state = "dirty" if stats.dirty else manifest.state
-        inputs = overlay_inputs(paths.active_upper, now=time.time())
+        latest_mirror = (
+            latest_dirty_mirror(self.nfs_root, manifest.id)
+            if manifest.write_policy == WRITE_POLICY_LOCAL_SSD_ASYNC
+            else None
+        )
+        local_paths = (
+            local_overlay_paths(self.mounts.local_overlay_root, manifest.id)
+            if manifest.write_policy == WRITE_POLICY_LOCAL_SSD_ASYNC
+            else None
+        )
+        local_stats = dirty_stats(local_paths.active_upper) if local_paths else None
+        if local_paths is not None and local_stats is not None and local_stats.dirty:
+            stats = local_stats
+            state = "dirty"
+            policy_input_path = local_paths.active_upper
+            overlay_info = {
+                "active_upper": str(paths.active_upper),
+                "local_active_upper": str(local_paths.active_upper),
+                "dirty": True,
+                "file_count": stats.file_count,
+                "bytes": stats.bytes,
+                "unpublished_local_dirty": True,
+            }
+            if latest_mirror is not None:
+                overlay_info["dirty_mirror"] = str(latest_mirror.path)
+                overlay_info["latest_dirty_epoch"] = latest_mirror.epoch
+        elif latest_mirror is not None and latest_mirror.file_count > 0:
+            stats = dirty_stats(latest_mirror.path)
+            state = "dirty" if stats.dirty else manifest.state
+            policy_input_path = latest_mirror.path
+            overlay_info = {
+                "active_upper": str(paths.active_upper),
+                "dirty": stats.dirty,
+                "file_count": stats.file_count,
+                "bytes": stats.bytes,
+                "dirty_mirror": str(latest_mirror.path),
+                "latest_dirty_epoch": latest_mirror.epoch,
+            }
+        else:
+            stats = dirty_stats(paths.active_upper)
+            state = "dirty" if stats.dirty else manifest.state
+            policy_input_path = paths.active_upper
+            overlay_info = {
+                "active_upper": str(paths.active_upper),
+                "dirty": stats.dirty,
+                "file_count": stats.file_count,
+                "bytes": stats.bytes,
+            }
+        inputs = overlay_inputs(policy_input_path, now=time.time())
         child_policy = replace(CommitPolicy(), mode=manifest.commit_mode or "auto")
         decision = evaluate(child_policy, inputs)
         comp = plan_compaction(manifest)
@@ -392,18 +628,14 @@ class MountdService:
             "type": manifest.type,
             "state": state,
             "generation": manifest.generation,
+            "write_policy": manifest.write_policy,
             "pinned": manifest.pinned,
             "mounted": bool(mount_status["mounted"]),
             "mountpoint": mount_status["mountpoint"],
             "refcount": mount_status["refcount"],
             "packs": [pack.to_dict() for pack in manifest.pack_stack.lowers],
             "delta_count": delta_count,
-            "overlay": {
-                "active_upper": str(paths.active_upper),
-                "dirty": stats.dirty,
-                "file_count": stats.file_count,
-                "bytes": stats.bytes,
-            },
+            "overlay": overlay_info,
             "policy": {
                 "mode": manifest.commit_mode or "auto",
                 "decision": decision,
@@ -463,9 +695,11 @@ def _serve_forever(
     ready_file: str | Path | None = None,
     idle_unmount_ttl: float = 0.0,
     idle_reap_interval: float = 30.0,
+    dirty_publish_interval: float = 1.0,
 ) -> int:
     stop = False
     next_reap = time.monotonic() + max(idle_reap_interval, 0.1)
+    next_publish = time.monotonic() + max(dirty_publish_interval, 0.1)
 
     def _handler(signum, frame):  # type: ignore[no-untyped-def]
         nonlocal stop
@@ -478,10 +712,15 @@ def _serve_forever(
         if ready_file:
             _write_ready_file(service, ready_file)
         while not stop:
-            if idle_unmount_ttl > 0 and time.monotonic() >= next_reap:
+            now = time.monotonic()
+            if idle_unmount_ttl > 0 and now >= next_reap:
                 with contextlib.suppress(Exception):
                     service.reap_idle_mounts(idle_unmount_ttl)
-                next_reap = time.monotonic() + max(idle_reap_interval, 0.1)
+                next_reap = now + max(idle_reap_interval, 0.1)
+            if dirty_publish_interval > 0 and now >= next_publish:
+                with contextlib.suppress(Exception):
+                    service.publish_dirty_epochs()
+                next_publish = now + max(dirty_publish_interval, 0.1)
             time.sleep(0.2)
     finally:
         with contextlib.suppress(Exception):
@@ -530,6 +769,23 @@ def main(argv: list[str] | None = None) -> int:
         help="mount a live pyfuse3 observation dispatcher at this path",
     )
     parser.add_argument(
+        "--default-write-policy",
+        default=os.environ.get("CCC_DEFAULT_WRITE_POLICY", WRITE_POLICY_SHARED_NFS),
+        choices=sorted(VALID_WRITE_POLICIES),
+        help="write policy for new children when observe marker has no explicit policy",
+    )
+    parser.add_argument(
+        "--local-overlay-root",
+        default=os.environ.get("CCC_LOCAL_OVERLAY_ROOT", ""),
+        help="node-local SSD root for local-ssd-async upper/work dirs",
+    )
+    parser.add_argument(
+        "--dirty-publish-interval",
+        type=float,
+        default=float(os.environ.get("CCC_DIRTY_PUBLISH_INTERVAL", "1")),
+        help="seconds between best-effort local-ssd-async dirty mirror publishes",
+    )
+    parser.add_argument(
         "--observe-ready-timeout",
         type=float,
         default=float(os.environ.get("CCC_OBSERVE_READY_TIMEOUT", "10")),
@@ -569,6 +825,8 @@ def main(argv: list[str] | None = None) -> int:
         managed_parent=ns.managed_parent or None,
         observe_root=ns.observe_root or None,
         observe_mountpoint=ns.observe_mountpoint or None,
+        default_write_policy=ns.default_write_policy,
+        local_overlay_root=ns.local_overlay_root or None,
     )
     service.reload_registry()
     if ns.observe_mountpoint:
@@ -616,6 +874,7 @@ def main(argv: list[str] | None = None) -> int:
         ready_file=ns.ready_file or None,
         idle_unmount_ttl=ns.idle_unmount_ttl,
         idle_reap_interval=ns.idle_reap_interval,
+        dirty_publish_interval=ns.dirty_publish_interval,
     )
 
 

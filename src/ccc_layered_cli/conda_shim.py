@@ -13,6 +13,7 @@ import sys
 from collections.abc import Callable, Mapping, MutableMapping
 from pathlib import Path
 
+from ccc_layered_core.manifest import WRITE_POLICY_SHARED_NFS, normalize_write_policy
 from ccc_layered_core.observe import OBSERVE_MARKER_NAME
 from ccc_layered_mountd.daemon import MountdService
 from ccc_layered_mountd.env_txn import (
@@ -30,12 +31,23 @@ _MUTATING = {"install", "update", "upgrade", "remove", "uninstall"}
 _NON_MUTATING = {"info", "list", "search", "config", "run", "clean", "doctor"}
 
 
-def init_conda_envs(path: str | Path) -> Path:
+def init_conda_envs(
+    path: str | Path,
+    *,
+    write_policy: str | None = None,
+) -> Path:
     """Create a conda-env observation root marker idempotently."""
     root = Path(path)
     root.mkdir(parents=True, exist_ok=True)
     marker = root / OBSERVE_MARKER_NAME
-    marker.touch(exist_ok=True)
+    if write_policy is None:
+        marker.touch(exist_ok=True)
+    else:
+        policy = normalize_write_policy(write_policy)
+        if policy == WRITE_POLICY_SHARED_NFS:
+            marker.write_text("", encoding="utf-8")
+        else:
+            marker.write_text(f'write_policy = "{policy}"\n', encoding="utf-8")
     return marker
 
 

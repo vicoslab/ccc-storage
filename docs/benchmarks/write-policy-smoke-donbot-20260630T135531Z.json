@@ -1,0 +1,28 @@
+{
+  "commit_generation": 1,
+  "files": 2000,
+  "local": {
+    "bytes": 65536000,
+    "files": 2000,
+    "read_files_per_second": 9508.587004644258,
+    "read_seconds": 0.21033619390800595,
+    "sha256": "671fff54e9235aefbbb926d4f4a807f958206f9f23e2a928493f7611ae23955d",
+    "write_files_per_second": 6332.913834437078,
+    "write_seconds": 0.3158103919122368
+  },
+  "local_fs": "overlay",
+  "local_vs_shared_write_speedup": 16.090634811656177,
+  "reader_fs": "nfs4",
+  "run_id": "donbot-20260630T135531Z-41409",
+  "shared": {
+    "bytes": 65536000,
+    "files": 2000,
+    "read_files_per_second": 1666.5414523814163,
+    "read_seconds": 1.2000901610590518,
+    "sha256": "6ac0a44e91d10aab92ca06a8c47b3c4b2184441b6c76c9309b5d7920586abc3a",
+    "write_files_per_second": 393.57762503251064,
+    "write_seconds": 5.0815896859858185
+  },
+  "shared_fs": "fuse.fuse-overlayfs",
+  "size_kib": 32
+}
