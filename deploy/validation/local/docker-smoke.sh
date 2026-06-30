@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 docker_bin="${DOCKER:-docker}"
 tag="${CCC_DOCKER_TAG:-ccc-layered-storage:smoke-local}"
 
@@ -26,8 +26,8 @@ fi
   sh -lc '
     set -eu
     make test
-    CCC_SMOKE_ROOT=/tmp/ccc-layered-docker-smoke/runtime deploy/runtime-smoke.sh
-    CCC_SMOKE_ROOT=/tmp/ccc-layered-docker-smoke/fuse deploy/fuse-smoke.sh
+    CCC_SMOKE_ROOT=/tmp/ccc-layered-docker-smoke/runtime deploy/validation/local/runtime-smoke.sh
+    CCC_SMOKE_ROOT=/tmp/ccc-layered-docker-smoke/fuse deploy/validation/local/fuse-smoke.sh
   '
 
 echo "docker smoke passed"

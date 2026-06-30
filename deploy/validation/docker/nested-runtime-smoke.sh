@@ -18,7 +18,7 @@ set -euo pipefail
 #   CCC_SKIP_BUILD                  Set to 1 to skip docker build
 #   CCC_RUNTIME_KEEP                Set to 1 to keep per-run root
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 docker_bin="${DOCKER:-docker}"
 python_bin="${PYTHON:-}"
 if [ -z "$python_bin" ]; then

@@ -7,6 +7,7 @@ set -euo pipefail
 #   mountd container: owns /dev/fuse + SYS_ADMIN and serves the live observation root
 #   app container: unprivileged, no /dev/fuse, no mountd socket/env, sees only an rslave storage bind
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 image_tag="${CCC_MOUNTD_IMAGE:-ccc-layered-mountd:local}"
 app_image="${CCC_APP_IMAGE:-$image_tag}"
 runtime_root="${CCC_RUNTIME_ROOT:-/storage/user/ccc-layered-storage-mountd-container-test}"
@@ -35,7 +36,7 @@ mkdir -p "$run_root"/{nfs,source,published}
 touch "$run_root/source/CCC_LAYERED_OBSERVE"
 
 if [ "$skip_build" != "1" ]; then
-  "$docker_bin" build -f deploy/Dockerfile.mountd -t "$image_tag" .
+  "$docker_bin" build -f "$repo_root/deploy/docker/mountd.Dockerfile" -t "$image_tag" "$repo_root"
 fi
 
 if [ -z "$docker_source_root" ]; then

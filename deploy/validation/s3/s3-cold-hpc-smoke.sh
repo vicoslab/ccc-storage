@@ -10,7 +10,7 @@ set -euo pipefail
 #
 # Credentials are sourced, never printed.
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 python_bin="${PYTHON:-}"
 if [ -z "$python_bin" ]; then
   if command -v python >/dev/null 2>&1; then

@@ -1,6 +1,6 @@
 # CCC layered write/read performance validation
 
-`deploy/performance-runtime-benchmark.sh` is the full write/read performance
+`deploy/validation/performance/performance-runtime-benchmark.sh` is the full write/read performance
 validation for the layered-storage stack.  It complements the smaller functional
 runtime smokes by comparing the actual storage paths users care about:
 
@@ -40,11 +40,11 @@ container-visible roots and Docker-host source roots:
 ```bash
 CCC_RUNTIME_KEEP=1 \
 CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-performance-test \
-CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/domen.tabernik@fri.uni-lj.si/ccc-layered-storage-performance-test \
+CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-layered-storage-performance-test \
 CCC_LOCAL_SSD_ROOT=/tmp/ccc-layered-storage-performance-local \
 CCC_LOCAL_SSD_DOCKER_SOURCE_ROOT=/tmp/ccc-layered-storage-performance-local \
 CCC_PERF_TIMEOUT=600 \
-deploy/performance-runtime-benchmark.sh
+deploy/validation/performance/performance-runtime-benchmark.sh
 ```
 
 The script builds `ccc-layered-mountd:local` unless

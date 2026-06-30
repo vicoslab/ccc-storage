@@ -11,7 +11,7 @@ set -euo pipefail
 #   - commit creates a SquashFS delta and clears the overlay;
 #   - after unmount/remount, committed data is readable through the same path.
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 docker_bin="${DOCKER:-docker}"
 python_bin="${PYTHON:-}"
 if [ -z "$python_bin" ]; then

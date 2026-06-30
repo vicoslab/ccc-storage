@@ -11,7 +11,7 @@ set -euo pipefail
 #   - observation registration is lazy: no child mounts before access, only the
 #     accessed observed child mounts after access.
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 docker_bin="${DOCKER:-docker}"
 python_bin="${PYTHON:-}"
 if [ -z "$python_bin" ]; then

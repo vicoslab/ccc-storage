@@ -4,9 +4,9 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-HOST_SCRIPT = ROOT / "deploy" / "privileged-runtime-smoke.sh"
-CONTAINER_SCRIPT = ROOT / "deploy" / "privileged-runtime-container.sh"
-PREREQS_DOC = ROOT / "deploy" / "PREREQS.md"
+HOST_SCRIPT = ROOT / "deploy" / "validation" / "docker" / "privileged-runtime-smoke.sh"
+CONTAINER_SCRIPT = ROOT / "deploy" / "validation" / "docker" / "privileged-runtime-container.sh"
+PREREQS_DOC = ROOT / "docs" / "operations" / "node-prerequisites.md"
 
 
 def _text() -> str:
@@ -63,7 +63,7 @@ def test_docker_source_root_env_is_documented_and_used_for_mount_source():
     assert "CCC_RUNTIME_DOCKER_SOURCE_ROOT" in host_text
     assert "CCC_RUNTIME_DOCKER_SOURCE_ROOT" in prereqs_text
     assert (
-        "/opt/shared_storage/user_data/domen.tabernik@fri.uni-lj.si/"
+        "/opt/shared_storage/user_data/<ccc-user-id>/"
         "ccc-layered-storage-runtime-test"
     ) in prereqs_text
     assert "refusing empty CCC_RUNTIME_DOCKER_SOURCE_ROOT" in host_text

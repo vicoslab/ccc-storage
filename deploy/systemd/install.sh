@@ -3,9 +3,9 @@ set -euo pipefail
 
 prefix="${PREFIX:-/usr/local}"
 systemd_dir="${SYSTEMD_DIR:-/etc/systemd/system}"
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-install -Dm0644 "$repo_root/deploy/ccc-layered-mountd.service" \
+install -Dm0644 "$repo_root/deploy/systemd/ccc-layered-mountd.service" \
   "$systemd_dir/ccc-layered-mountd.service"
 
 python -m pip install "$repo_root"

@@ -1,6 +1,6 @@
 [Unit]
 Description=CCC layered storage mount daemon
-Documentation=file:/opt/ccc-layered-storage/deploy/PREREQS.md
+Documentation=file:/opt/ccc-layered-storage/docs/operations/node-prerequisites.md
 After=network-online.target remote-fs.target
 Wants=network-online.target
 

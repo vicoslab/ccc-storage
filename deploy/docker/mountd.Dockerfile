@@ -24,6 +24,6 @@ COPY deploy ./deploy
 RUN python -m pip install --upgrade pip \
     && python -m pip install '.[manifest,fuse]'
 
-ENTRYPOINT ["tini", "--", "/workspace/ccc-layered-storage/deploy/mountd-entrypoint.sh"]
+ENTRYPOINT ["tini", "--", "/workspace/ccc-layered-storage/deploy/docker/mountd-entrypoint.sh"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD ccc-layered doctor --json >/dev/null || exit 1

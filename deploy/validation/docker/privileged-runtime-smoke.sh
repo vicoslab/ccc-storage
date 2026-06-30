@@ -17,7 +17,7 @@ set -euo pipefail
 #   CCC_RUNTIME_KEEP            Set to 1 to keep the per-run root
 #   CCC_ALLOW_PROPAGATION_SKIP  Set to 1 to skip host propagation failure
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 docker_bin="${DOCKER:-docker}"
 python_bin="${PYTHON:-}"
 if [ -z "$python_bin" ]; then
@@ -254,7 +254,7 @@ if ! docker_run_output="$("$docker_bin" run -d \
   --security-opt seccomp=unconfined \
   --mount "type=bind,src=$docker_run_root_source,dst=/ccc-runtime,bind-propagation=rshared" \
   "$tag" \
-  sh -lc 'deploy/privileged-runtime-container.sh' 2>&1)"; then
+  sh -lc 'deploy/validation/docker/privileged-runtime-container.sh' 2>&1)"; then
   print_docker_run_failure "$docker_run_output" "$run_root" "$docker_run_root_source" "$runtime_root_real" "$docker_source_root_real"
   exit 1
 fi

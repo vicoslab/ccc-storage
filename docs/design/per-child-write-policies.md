@@ -123,7 +123,7 @@ A production runtime smoke must validate both policies:
 - a published NFS mirror becomes visible to a second mount within a bounded
   interval and contains complete files only.
 
-Validated runtime result on `donbot` (`deploy/write-policy-runtime-smoke.sh`,
+Validated runtime result on `donbot` (`deploy/validation/docker/write-policy-runtime-smoke.sh`,
 Docker/FUSE, `2,000 × 32 KiB` files, run
 `donbot-20260630T135531Z-41409`; artifact:
 `docs/benchmarks/write-policy-smoke-donbot-20260630T135531Z.json`):

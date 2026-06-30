@@ -3,7 +3,7 @@
 Command run locally from this repo:
 
 ```bash
-PATH=/home/domen/conda/envs/ccc-dev/bin:$PATH \
+PATH=/path/to/ccc-dev/bin:$PATH \
 python bench/conda_small_files.py \
   --files 3000 \
   --payload-bytes 256 \

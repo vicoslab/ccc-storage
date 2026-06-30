@@ -36,7 +36,7 @@ docker build -t ccc-layered-storage:test .
 Production mountd image:
 
 ```bash
-docker build -f deploy/Dockerfile.mountd -t ccc-layered-mountd:local .
+docker build -f deploy/docker/mountd.Dockerfile -t ccc-layered-mountd:local .
 ```
 
 ## Run checks
@@ -50,7 +50,7 @@ Runtime smoke for the production topology:
 
 ```bash
 CCC_MOUNTD_IMAGE=ccc-layered-mountd:local \
-deploy/mountd-container-runtime-smoke.sh
+deploy/validation/docker/mountd-container-runtime-smoke.sh
 ```
 
 This starts a privileged mountd container and a separate unprivileged app
@@ -107,4 +107,4 @@ ENABLE_STORAGE_MOUNT_PROPAGATION: true
 - Conda-style metadata benchmark: `docs/performance/conda-small-files-smoke.md`
 - Image-like small-file benchmark: `docs/performance/image-small-files-5000x32k.md`
 - Full write/read validation benchmark: `docs/performance/write-read-validation.md`
-- Runtime prerequisites: `deploy/PREREQS.md`
+- Runtime prerequisites: `docs/operations/node-prerequisites.md`

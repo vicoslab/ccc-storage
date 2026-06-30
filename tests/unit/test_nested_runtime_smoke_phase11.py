@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "deploy" / "nested-runtime-smoke.sh"
+SCRIPT = ROOT / "deploy" / "validation" / "docker" / "nested-runtime-smoke.sh"
 
 
 def test_nested_runtime_smoke_exists_and_validates_required_invariants():

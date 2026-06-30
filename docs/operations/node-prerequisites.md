@@ -53,7 +53,7 @@ For a scratch-only control-plane smoke test that does not touch production
 `/storage/.ccc-layered`, run from the repository checkout:
 
 ```bash
-deploy/runtime-smoke.sh
+deploy/validation/local/runtime-smoke.sh
 ```
 
 The script creates a temporary root under `/tmp` by default, starts a local
@@ -64,7 +64,7 @@ For real SquashFS build/verify/extract plus an unprivileged FUSE mount check,
 run:
 
 ```bash
-deploy/fuse-smoke.sh
+deploy/validation/local/fuse-smoke.sh
 ```
 
 This uses a git-ignored repo-local `.scratch/` root by default so CCC's
@@ -80,11 +80,11 @@ For a local Docker validation image that does not push anything and uses only
 scratch container storage, run:
 
 ```bash
-deploy/docker-smoke.sh
+deploy/validation/local/docker-smoke.sh
 ```
 
 It builds the repository `Dockerfile` with a local tag, then runs unit tests,
-`deploy/runtime-smoke.sh`, and `deploy/fuse-smoke.sh` inside one smoke
+`deploy/validation/local/runtime-smoke.sh`, and `deploy/validation/local/fuse-smoke.sh` inside one smoke
 container. `/dev/fuse`, `CAP_SYS_ADMIN`, and the AppArmor mount relaxation are
 passed only to that container.
 
@@ -94,11 +94,11 @@ For real S3-compatible object-store validation, place credentials in a shell fil
 that exports only standard AWS variables, then run:
 
 ```bash
-PYTHON=/home/domen/conda/envs/ccc-dev/bin/python \
+PYTHON=/path/to/ccc-dev/bin/python \
 CCC_S3_CREDENTIALS_SH=/path/to/s3_storage_premissions.sh \
 CCC_S3_ENDPOINT=https://ceph-7.fri.uni-lj.si \
 CCC_S3_ADDRESSING_STYLE=auto \
-deploy/s3-smoke.sh
+deploy/validation/s3/s3-smoke.sh
 ```
 
 The script sources the credential file without printing it, creates or validates
@@ -110,11 +110,11 @@ objects/bucket unless `CCC_S3_KEEP=1` is set.
 For the stronger end-to-end cold-tier and external-HPC exchange validation, run:
 
 ```bash
-PYTHON=/home/domen/conda/envs/ccc-dev/bin/python \
+PYTHON=/path/to/ccc-dev/bin/python \
 CCC_S3_CREDENTIALS_SH=/path/to/s3_storage_premissions.sh \
 CCC_S3_ENDPOINT=https://ceph-7.fri.uni-lj.si \
 CCC_S3_ADDRESSING_STYLE=auto \
-deploy/s3-cold-hpc-smoke.sh
+deploy/validation/s3/s3-cold-hpc-smoke.sh
 ```
 
 This smoke creates a real dirty overlay for a dataset child, commits it through
@@ -138,7 +138,7 @@ For an actual Docker runtime check where mount authority is fully inside one
 privileged Docker container, run:
 
 ```bash
-CCC_CLIENT_CONTAINERS=domen-cuda10 deploy/privileged-runtime-smoke.sh
+CCC_CLIENT_CONTAINERS=domen-cuda10 deploy/validation/docker/privileged-runtime-smoke.sh
 ```
 
 From a CCC container with the host Docker socket mounted, Docker bind sources are
@@ -147,9 +147,9 @@ storage through `/storage/user`. In that case pass both roots:
 
 ```bash
 CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-runtime-test \
-CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/domen.tabernik@fri.uni-lj.si/ccc-layered-storage-runtime-test \
+CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-layered-storage-runtime-test \
 CCC_CLIENT_CONTAINERS=domen-cuda10 \
-deploy/privileged-runtime-smoke.sh
+deploy/validation/docker/privileged-runtime-smoke.sh
 ```
 
 This smoke is intentionally privileged and intentionally no-sidecar. It does not
@@ -165,8 +165,8 @@ For nested/hierarchical pack validation, run:
 
 ```bash
 CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-nested-test \
-CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/domen.tabernik@fri.uni-lj.si/ccc-layered-storage-nested-test \
-deploy/nested-runtime-smoke.sh
+CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-layered-storage-nested-test \
+deploy/validation/docker/nested-runtime-smoke.sh
 ```
 
 This smoke builds a parent/root SquashFS with `exclude_boundaries=[...]`, verifies
@@ -181,8 +181,8 @@ run:
 
 ```bash
 CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-observation-test \
-CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/domen.tabernik@fri.uni-lj.si/ccc-layered-storage-observation-test \
-deploy/observation-runtime-smoke.sh
+CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-layered-storage-observation-test \
+deploy/validation/docker/observation-runtime-smoke.sh
 ```
 
 This smoke places visible `CCC_LAYERED_OBSERVE` marker files at a root and a
@@ -213,7 +213,7 @@ example:
 
 ```bash
 for node in donbot morbo calculon crushinator flexo kif zapp; do
-  ssh "$node" 'cd /path/to/ccc-layered-storage && CCC_CLIENT_CONTAINERS=domen-cuda10 deploy/privileged-runtime-smoke.sh'
+  ssh "$node" 'cd /path/to/ccc-layered-storage && CCC_CLIENT_CONTAINERS=domen-cuda10 deploy/validation/docker/privileged-runtime-smoke.sh'
 done
 ```
 
@@ -234,7 +234,7 @@ Stop the daemon and remove the unit:
 
 ```bash
 sudo systemctl stop ccc-layered-mountd
-sudo deploy/uninstall.sh
+sudo deploy/systemd/uninstall.sh
 ```
 
 Committed packs and manifests are immutable/backward-compatible within a schema

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-S3_SMOKE = ROOT / "deploy" / "s3-smoke.sh"
+S3_SMOKE = ROOT / "deploy" / "validation" / "s3" / "s3-smoke.sh"
 
 
 def test_s3_smoke_script_exists_and_is_executable():

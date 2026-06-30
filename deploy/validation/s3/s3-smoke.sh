@@ -18,7 +18,7 @@ set -euo pipefail
 #                           ccc-layered-storage/smoke/.
 #   CCC_S3_KEEP             set to 1 to keep uploaded objects/scratch output.
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 python_bin="${PYTHON:-}"
 if [ -z "$python_bin" ]; then
   if command -v python >/dev/null 2>&1; then

@@ -24,7 +24,7 @@ App containers:
 ## Build image
 
 ```bash
-docker build -f deploy/Dockerfile.mountd -t ccc-layered-mountd:local .
+docker build -f deploy/docker/mountd.Dockerfile -t ccc-layered-mountd:local .
 ```
 
 ## Run smoke topology
@@ -32,7 +32,7 @@ docker build -f deploy/Dockerfile.mountd -t ccc-layered-mountd:local .
 ```bash
 CCC_MOUNTD_IMAGE=ccc-layered-mountd:local \
 CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-mountd-container-test \
-deploy/mountd-container-runtime-smoke.sh
+deploy/validation/docker/mountd-container-runtime-smoke.sh
 ```
 
 The smoke starts two containers: privileged mountd and unprivileged app.  It
