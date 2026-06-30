@@ -4,6 +4,8 @@ import json
 import stat
 from pathlib import Path
 
+import pytest
+
 from ccc_layered_core.checksum import sha256_file
 from ccc_layered_core.manifest import ChildManifest, OverlayInfo, PackInfo, PackStack, dump_atomic
 from ccc_layered_core.protocol import Request
@@ -97,7 +99,7 @@ def test_mountd_docker_artifacts_are_dedicated_service_container():
     assert smoke.exists()
 
     docker_text = dockerfile.read_text()
-    assert "ccc-layered-mountd" in docker_text
+    assert "ccc-storage doctor" in docker_text
     assert "make test" not in docker_text
     assert ".[manifest,fuse]" in docker_text
     assert "ENTRYPOINT" in docker_text
@@ -107,13 +109,13 @@ def test_mountd_docker_artifacts_are_dedicated_service_container():
     entry_text = entrypoint.read_text()
     for var in ("CCC_NFS_ROOT", "CCC_OBSERVE_ROOT", "CCC_OBSERVE_MOUNTPOINT"):
         assert var in entry_text
-    assert "exec ccc-layered-mountd" in entry_text
+    assert "exec ccc-storage mountd" in entry_text
     assert "--observe-mountpoint" in entry_text
     assert "--socket-mode" in entry_text
     assert "/var/run/docker.sock" not in entry_text
 
     smoke_text = smoke.read_text()
-    assert "ccc-layered-mountd-test" in smoke_text
+    assert "ccc-storage-mountd-test" in smoke_text
     assert "ccc-layered-app-test" in smoke_text
     assert "bind-propagation=rshared" in smoke_text
     assert "bind-propagation=rslave" in smoke_text
@@ -159,6 +161,60 @@ def test_ready_file_contains_doctor_json(fake_nfs, tmp_path):
     assert data["active_submount_count"] == 0
 
 
+def test_mountd_loop_runs_background_compaction_interval(monkeypatch):
+    class FakeServer:
+        def __init__(self):
+            self.started = False
+            self.stopped = False
+
+        def start(self):
+            self.started = True
+
+        def stop(self):
+            self.stopped = True
+
+    class FakeService:
+        def __init__(self):
+            self.compactions = 0
+            self.stopped = False
+
+        def publish_dirty_epochs(self):
+            return []
+
+        def reap_idle_mounts(self, ttl):
+            return []
+
+        def run_background_compaction_once(self):
+            self.compactions += 1
+            return []
+
+        def stop(self):
+            self.stopped = True
+
+    server = FakeServer()
+    service = FakeService()
+    monotonic_values = iter([0.0, 0.0, 0.0, 1.0])
+    monkeypatch.setattr(daemon.time, "monotonic", lambda: next(monotonic_values, 1.0))
+
+    def stop_after_one_tick(_seconds):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(daemon.time, "sleep", stop_after_one_tick)
+
+    with pytest.raises(KeyboardInterrupt):
+        daemon._serve_forever(
+            server,
+            service,
+            dirty_publish_interval=0,
+            compaction_interval=0.1,
+        )
+
+    assert server.started is True
+    assert server.stopped is True
+    assert service.stopped is True
+    assert service.compactions == 1
+
+
 def test_mountd_cli_exposes_production_safety_flags():
     text = Path(daemon.__file__).read_text()
     for flag in (
@@ -168,5 +224,8 @@ def test_mountd_cli_exposes_production_safety_flags():
         "--ready-file",
         "--idle-unmount-ttl",
         "--idle-reap-interval",
+        "--compaction-interval",
     ):
         assert flag in text
+    assert "CCC_COMPACT_INTERVAL_SECONDS" in text
+    assert "run_background_compaction_once" in text

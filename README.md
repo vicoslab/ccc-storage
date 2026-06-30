@@ -36,7 +36,7 @@ docker build -f dev/docker/test.Dockerfile -t ccc-layered-storage:test .
 Production mountd image:
 
 ```bash
-docker build -f deploy/docker/mountd.Dockerfile -t ccc-layered-mountd:local .
+docker build -f deploy/docker/mountd.Dockerfile -t ccc-layered-storage-mountd:local .
 ```
 
 ## Run checks
@@ -49,7 +49,7 @@ make test
 Development runtime smoke for the mountd/app-container topology:
 
 ```bash
-CCC_MOUNTD_IMAGE=ccc-layered-mountd:local \
+CCC_MOUNTD_IMAGE=ccc-layered-storage-mountd:local \
 dev/validation/docker/mountd-container-runtime-smoke.sh
 ```
 
@@ -63,24 +63,24 @@ validation scripts live under `dev/`; deployment files live under `deploy/`.
 Mark a conda envs folder for layered observation:
 
 ```bash
-ccc-layered init-conda-envs /storage/user/layered-source/conda/envs
+ccc-storage init-conda-envs /storage/user/layered-source/conda/envs
 ```
 
 Basic management commands:
 
 ```bash
-ccc-layered doctor
-ccc-layered observe-ls
-ccc-layered observe-mkdir my-env
-ccc-layered status observe:my-env
-ccc-layered commit observe:my-env -m "updated env"
+ccc-storage doctor
+ccc-storage observe-ls
+ccc-storage observe-mkdir my-env
+ccc-storage status observe:my-env
+ccc-storage commit observe:my-env -m "updated env"
 ```
 
 Safe conda/mamba wrappers:
 
 ```bash
-ccc-conda install -n my-env numpy
-ccc-mamba update -n my-env --all
+ccc-storage conda install -n my-env numpy
+ccc-storage mamba update -n my-env --all
 ```
 
 The wrappers pass through to normal conda/mamba unless the target is an explicit
@@ -106,4 +106,9 @@ ENABLE_STORAGE_MOUNT_PROPAGATION: true
 - Deployment artifacts: `deploy/README.md`
 - Development validation and benchmarks: `dev/README.md`
 - Mountd container operation: `docs/operations/mountd-container.md`
+- CLI tools reference: `docs/operations/cli-tools.md`
 - Conda/mamba shim: `docs/operations/conda-shim.md`
+- Log-structured compaction operation: `docs/operations/log-structured-compaction.md`
+- System design for log-structured pack levels and partial compaction: `../docs/components/log-structured-pack-levels.md`
+- Cross-system implementation plan for pack levels and tombstones: `../docs/implementation/log-structured-pack-levels-implementation-plan.md`
+- Conda-style metadata benchmark: `dev/docs/performance/conda-small-files-smoke.md`

@@ -19,7 +19,7 @@ def test_observation_runtime_smoke_exists_and_validates_marker_lazy_invariants()
         "observed env-a payload leaked into user1 pack",
         "user2_pack = build_pack(src / 'user2'",
         "service.mounts.active_count() != 0",
-        "ccc-layered', 'observe-access'",
+        "ccc-storage', 'observe-access'",
         "expected only user2 mounted after first access",
         "expected only env-a mounted after access",
     ):

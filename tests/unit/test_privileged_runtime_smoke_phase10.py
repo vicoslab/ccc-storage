@@ -100,11 +100,11 @@ def test_container_exercises_current_runtime_data_plane():
     text = _text()
     for phrase in (
         "fuse-overlayfs",
-        "ccc-layered-mountd",
-        "ccc-layered commit",
-        "ccc-pack build",
-        "ccc-layered mount",
-        "ccc-layered doctor",
+        "ccc-storage mountd",
+        "ccc-storage commit",
+        "ccc-storage pack build",
+        "ccc-storage mount",
+        "ccc-storage doctor",
     ):
         assert phrase in text
 

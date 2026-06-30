@@ -15,7 +15,7 @@ def test_nested_runtime_smoke_exists_and_validates_required_invariants():
         "run --rm -i",
         "unsquashfs",
         "child payload leaked into parent pack",
-        "ccc-layered mount-tree",
+        "ccc-storage mount-tree",
         "parent-only.txt",
         "bin/python",
         "nested SquashFS mount exposed parent and child data",

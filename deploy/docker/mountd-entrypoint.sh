@@ -29,13 +29,13 @@ mkdir -p \
   "$CCC_OBSERVE_MOUNTPOINT"
 
 if [ ! -c /dev/fuse ]; then
-  echo "ccc-layered-mountd: /dev/fuse is not available as a character device" >&2
+  echo "ccc-storage mountd: /dev/fuse is not available as a character device" >&2
   exit 2
 fi
 
 for bin in mksquashfs unsquashfs squashfuse fuse-overlayfs fusermount3; do
   if ! command -v "$bin" >/dev/null 2>&1; then
-    echo "ccc-layered-mountd: required runtime binary missing: $bin" >&2
+    echo "ccc-storage mountd: required runtime binary missing: $bin" >&2
     exit 2
   fi
 done
@@ -45,13 +45,13 @@ if [ -n "${CCC_PROPAGATION_CHECK_PATH:-}" ] && command -v findmnt >/dev/null 2>&
   case "$propagation" in
     shared|slave) ;;
     *)
-      echo "ccc-layered-mountd: $CCC_PROPAGATION_CHECK_PATH propagation is '${propagation:-unknown}', expected shared/slave" >&2
+      echo "ccc-storage mountd: $CCC_PROPAGATION_CHECK_PATH propagation is '${propagation:-unknown}', expected shared/slave" >&2
       exit 2
       ;;
   esac
 fi
 
-exec ccc-layered-mountd \
+exec ccc-storage mountd \
   --nfs-root "$CCC_NFS_ROOT" \
   --run-dir "$CCC_NODE_RUN_DIR" \
   --socket "$CCC_MOUNTD_SOCK" \

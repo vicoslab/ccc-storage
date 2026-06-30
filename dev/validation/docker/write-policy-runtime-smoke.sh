@@ -11,7 +11,7 @@ set -euo pipefail
 #   - local write throughput beats shared-NFS dirty writes by a large margin
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-image_tag="${CCC_MOUNTD_IMAGE:-ccc-layered-mountd:local}"
+image_tag="${CCC_MOUNTD_IMAGE:-ccc-layered-storage-mountd:local}"
 app_image="${CCC_APP_IMAGE:-$image_tag}"
 runtime_root="${CCC_RUNTIME_ROOT:-/storage/user/ccc-layered-storage-write-policy-test}"
 local_ssd_root="${CCC_LOCAL_SSD_ROOT:-$runtime_root/local-ssd}"
@@ -187,8 +187,8 @@ if [ ! -e "$run_root/nfs/overlays/observe%3Ashared-env/active/class_000/img_0000
 fi
 
 # Local child: create manifest, switch policy before first mount, then app access mounts it.
-"$docker_bin" exec "$writer_name" ccc-layered observe-mkdir local-env --json >/tmp/ccc-layered-local-create.json
-"$docker_bin" exec "$writer_name" ccc-layered write-policy observe:local-env local-ssd-async --json >/tmp/ccc-layered-local-policy.json
+"$docker_bin" exec "$writer_name" ccc-storage observe-mkdir local-env --json >/tmp/ccc-layered-local-create.json
+"$docker_bin" exec "$writer_name" ccc-storage write-policy observe:local-env local-ssd-async --json >/tmp/ccc-layered-local-policy.json
 "$docker_bin" exec "$app_name" sh -lc 'ls -la /storage/layered/local-env >/dev/null'
 wait_for_mount "$app_name" /storage/layered/local-env
 local_fs="$($docker_bin exec "$app_name" sh -lc 'findmnt -T /storage/layered/local-env -no FSTYPE')"
@@ -205,7 +205,7 @@ if [ -e "$run_root/nfs/overlays/observe%3Alocal-env/active/class_000/img_000000.
   exit 1
 fi
 
-"$docker_bin" exec "$writer_name" ccc-layered publish observe:local-env --json >/tmp/ccc-layered-local-publish.json
+"$docker_bin" exec "$writer_name" ccc-storage publish observe:local-env --json >/tmp/ccc-layered-local-publish.json
 "$docker_bin" exec "$writer_name" sh -lc 'test -e /ccc-runtime/nfs/async/observe%3Alocal-env/current/class_000/img_000000.jpg' || {
   echo "local async publish did not create NFS mirror" >&2
   exit 1
@@ -221,8 +221,8 @@ reader_fs="$($docker_bin exec "$reader_app_name" sh -lc 'findmnt -T /storage/lay
 case "$reader_fs" in none|overlay) echo "reader unexpectedly got writer-like fs: $reader_fs" >&2; exit 1 ;; *) ;; esac
 
 # Commit after draining writer mount, then verify committed read works through writer app.
-"$docker_bin" exec "$writer_name" ccc-layered umount observe:local-env --json >/tmp/ccc-layered-local-umount.json
-"$docker_bin" exec "$writer_name" ccc-layered commit observe:local-env --json >/tmp/ccc-layered-local-commit.json
+"$docker_bin" exec "$writer_name" ccc-storage umount observe:local-env --json >/tmp/ccc-layered-local-umount.json
+"$docker_bin" exec "$writer_name" ccc-storage commit observe:local-env --json >/tmp/ccc-layered-local-commit.json
 "$docker_bin" exec "$app_name" sh -lc 'ls -la /storage/layered/local-env >/dev/null 2>&1 || true'
 wait_for_mount "$app_name" /storage/layered/local-env
 "$docker_bin" exec "$app_name" sh -lc 'test -s /storage/layered/local-env/class_000/img_000000.jpg'

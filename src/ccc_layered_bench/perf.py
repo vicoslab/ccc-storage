@@ -203,8 +203,8 @@ def _parse_size(ns: argparse.Namespace) -> int:
     return int(ns.size_mib) * 1024 * 1024
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(argv: list[str] | None = None, *, prog: str = "ccc-storage benchmark") -> int:
+    parser = argparse.ArgumentParser(prog=prog, description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--target", required=True)
     parser.add_argument("--workload-name", required=True)

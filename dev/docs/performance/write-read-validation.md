@@ -47,7 +47,7 @@ CCC_PERF_TIMEOUT=600 \
 dev/validation/performance/performance-runtime-benchmark.sh
 ```
 
-The script builds `ccc-layered-mountd:local` unless
+The script builds `ccc-layered-storage-mountd:local` unless
 `CCC_RUNTIME_SKIP_BUILD=1` is set.
 
 ## Validation gates

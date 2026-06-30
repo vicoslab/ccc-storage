@@ -229,14 +229,14 @@ try:
     env = dict(os.environ)
     env['CCC_MOUNTD_SOCK'] = str(sock)
     cp_user2 = subprocess.run(
-        ['ccc-layered', 'observe-access', 'user2/profile.txt', '--json'],
+        ['ccc-storage', 'observe-access', 'user2/profile.txt', '--json'],
         capture_output=True,
         text=True,
         check=False,
         env=env,
     )
     if cp_user2.returncode != 0:
-        raise SystemExit(f'ccc-layered observe-access user2 failed: {cp_user2.stderr}{cp_user2.stdout}')
+        raise SystemExit(f'ccc-storage observe-access user2 failed: {cp_user2.stderr}{cp_user2.stdout}')
     mounted_user2 = json.loads(cp_user2.stdout)
     active = service.mounts.active_ids()
     if active != ['observe:user2']:
@@ -246,26 +246,26 @@ try:
         raise SystemExit('observed user2 SquashFS payload not visible after lazy access')
 
     cp_umount = subprocess.run(
-        ['ccc-layered', 'umount', 'observe:user2', '--json'],
+        ['ccc-storage', 'umount', 'observe:user2', '--json'],
         capture_output=True,
         text=True,
         check=False,
         env=env,
     )
     if cp_umount.returncode != 0:
-        raise SystemExit(f'ccc-layered umount user2 failed: {cp_umount.stderr}{cp_umount.stdout}')
+        raise SystemExit(f'ccc-storage umount user2 failed: {cp_umount.stderr}{cp_umount.stdout}')
     if service.mounts.active_count() != 0:
         raise SystemExit(f'user2 remained mounted after unmount: {service.mounts.active_ids()!r}')
 
     cp = subprocess.run(
-        ['ccc-layered', 'observe-access', 'user1/conda/env-a/bin/python', '--json'],
+        ['ccc-storage', 'observe-access', 'user1/conda/env-a/bin/python', '--json'],
         capture_output=True,
         text=True,
         check=False,
         env=env,
     )
     if cp.returncode != 0:
-        raise SystemExit(f'ccc-layered observe-access failed: {cp.stderr}{cp.stdout}')
+        raise SystemExit(f'ccc-storage observe-access failed: {cp.stderr}{cp.stdout}')
     mounted = json.loads(cp.stdout)
     active = service.mounts.active_ids()
     if active != ['observe:user1/conda/env-a']:

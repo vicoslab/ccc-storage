@@ -25,7 +25,7 @@ def test_count_files_excludes_child_boundaries(tmp_path):
     assert count_files(tmp_path, exclude_boundaries=["conda/envs/env-a"]) == 1
 
 
-def test_prepare_delta_source_filters_fuse_overlayfs_whiteout_artifacts(tmp_path):
+def test_prepare_delta_source_preserves_fuse_overlayfs_whiteout_artifacts(tmp_path):
     src = tmp_path / "upper"
     src.mkdir()
     (src / "plain.txt").write_text("plain")
@@ -39,11 +39,30 @@ def test_prepare_delta_source_filters_fuse_overlayfs_whiteout_artifacts(tmp_path
     dst = tmp_path / "prepared"
     copied = prepare_delta_source(src, dst)
 
-    assert copied == 2
+    assert copied == 5
     assert (dst / "plain.txt").read_text() == "plain"
     assert (dst / "client-writes" / "domen-cuda10.txt").read_text() == "client write"
-    assert not any(is_overlayfs_artifact(path.name) for path in dst.rglob("*"))
-    assert not (dst / "client-writes" / ".wh.deleted.txt").exists()
+    assert (dst / "client-writes" / ".wh.deleted.txt").exists()
+    assert (dst / "client-writes" / ".wh..wh..opq").exists()
+    assert (dst / ".wh..opq").exists()
+    assert any(is_overlayfs_artifact(path.name) for path in dst.rglob("*"))
+
+
+def test_prepare_delta_source_still_ignores_unsupported_special_files(tmp_path):
+    src = tmp_path / "upper"
+    src.mkdir()
+    fifo = src / "named-pipe"
+    fifo_exists = hasattr(__import__("os"), "mkfifo")
+    if fifo_exists:
+        __import__("os").mkfifo(fifo)
+    (src / "plain.txt").write_text("plain")
+
+    dst = tmp_path / "prepared"
+    copied = prepare_delta_source(src, dst)
+
+    assert copied == 1
+    assert (dst / "plain.txt").exists()
+    assert not (dst / "named-pipe").exists()
 
 
 def test_build_pack_fails_clearly_when_mksquashfs_missing(monkeypatch, tmp_path):

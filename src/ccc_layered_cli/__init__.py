@@ -1,4 +1,4 @@
-"""ccc_layered_cli — the unprivileged user/container-facing CLI, `ccc-layered`.
+"""ccc_layered_cli — the unprivileged user/container-facing CLI, `ccc-storage`.
 
 The only lifecycle/control surface users and jobs touch. It does no mounting,
 packing, or NFS mutation itself: it sends requests to the local mountd control

@@ -152,7 +152,7 @@ def import_hpc_delta_from_s3(
         msg = f"invalid import record at {clean}/import-record.json: {exc}"
         raise ObjectStoreError(msg) from exc
 
-    with tempfile.TemporaryDirectory(prefix="ccc-layered-hpc-import-") as tmp_dir:
+    with tempfile.TemporaryDirectory(prefix="ccc-storage-hpc-import-") as tmp_dir:
         delta = Path(tmp_dir) / "output-delta.tar"
         store.get_file(record.delta_key, delta)
         _verify_file(delta, expected_sha=record.sha256, expected_size=record.size)
@@ -164,7 +164,7 @@ def import_hpc_delta_from_s3(
 
 
 def _put_json(store: ObjectStore, key: str, data: dict) -> None:
-    with tempfile.TemporaryDirectory(prefix="ccc-layered-hpc-json-") as tmp_dir:
+    with tempfile.TemporaryDirectory(prefix="ccc-storage-hpc-json-") as tmp_dir:
         path = Path(tmp_dir) / "record.json"
         path.write_text(json.dumps(data, indent=2, sort_keys=True))
         store.put_file(key, path)

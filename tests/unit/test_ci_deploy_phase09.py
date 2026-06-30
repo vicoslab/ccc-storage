@@ -30,7 +30,7 @@ def test_ci_enforces_core_pack_coverage_gate():
 
 def test_deploy_artifacts_exist_and_are_safe_defaults():
     deploy_readme = ROOT / "deploy" / "README.md"
-    service = ROOT / "deploy" / "systemd" / "ccc-layered-mountd.service"
+    service = ROOT / "deploy" / "systemd" / "ccc-storage-mountd.service"
     install = ROOT / "deploy" / "systemd" / "install.sh"
     uninstall = ROOT / "deploy" / "systemd" / "uninstall.sh"
     prereqs = ROOT / "dev" / "docs" / "operations" / "node-prerequisites.md"
@@ -68,7 +68,7 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
 
     service_text = service.read_text()
     assert "ExecStart=" in service_text
-    assert "ccc-layered-mountd" in service_text
+    assert "ccc-storage mountd" in service_text
     assert "Restart=on-failure" in service_text
     assert "CAP_SYS_ADMIN" in service_text
     assert "/dev/fuse" in service_text

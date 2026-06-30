@@ -1,4 +1,4 @@
-"""``ccc-layered env-*`` subcommands: managed conda env transactions (Phase 07).
+"""``ccc-storage env-*`` subcommands: managed conda env transactions (Phase 07).
 
 These commands run *locally* against a node-built :class:`MountdService` (the
 package-manager command must execute on the node where the env lives, near the
@@ -28,7 +28,7 @@ from ccc_layered_mountd.env_txn import (
 def _build_service() -> MountdService:
     nfs_root = os.environ.get("CCC_NFS_ROOT", "")
     if not nfs_root:
-        raise SystemExit("ccc-layered env: $CCC_NFS_ROOT is required for env transactions")
+        raise SystemExit("ccc-storage env: $CCC_NFS_ROOT is required for env transactions")
     run_dir = os.environ.get("CCC_NODE_RUN_DIR", "/run/ccc-layered")
     service = MountdService(nfs_root, run_dir)
     service.reload_registry()
@@ -79,7 +79,7 @@ def env_txn_command(
     if command and command[0] == "--":  # argparse REMAINDER keeps the separator
         command = command[1:]
     if not command:
-        print("ccc-layered env-txn: no command given (use: env-txn <env> -- <cmd...>)")
+        print("ccc-storage env-txn: no command given (use: env-txn <env> -- <cmd...>)")
         return 2
     result = run_env_txn(
         ns.path, command, service=service, runner=runner, sanity_check=sanity_check

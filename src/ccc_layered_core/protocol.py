@@ -1,4 +1,4 @@
-"""Newline-delimited JSON protocol for `ccc-layered` ↔ mountd."""
+"""Newline-delimited JSON protocol for `ccc-storage` ↔ mountd."""
 
 from __future__ import annotations
 

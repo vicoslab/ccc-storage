@@ -86,8 +86,8 @@ Crash behavior:
 CLI switching changes the manifest policy and optionally remounts the local node:
 
 ```bash
-ccc-layered write-policy observe:env shared-nfs
-ccc-layered write-policy observe:env local-ssd-async --remount
+ccc-storage write-policy observe:env shared-nfs
+ccc-storage write-policy observe:env local-ssd-async --remount
 ```
 
 Switching rules:
@@ -106,6 +106,10 @@ Switching rules:
   latest non-empty published dirty mirror.  Commit refuses if a per-child writer
   lock is still held, if the mirror is empty, or if the mirror base generation no
   longer matches the manifest generation.
+- successful commits write one log-structured delta pack with level/generation
+  metadata.  When `CCC_COMPACT_AFTER_COMMIT=1`, mountd may immediately compact a
+  safe upper-level suffix, but it will not rewrite the base unless policy allows
+  base maintenance.
 
 After a successful `local-ssd-async` commit, mountd removes the NFS async mirror
 and node-local dirty upper/work state so the next mount starts from the committed

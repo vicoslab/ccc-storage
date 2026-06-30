@@ -13,7 +13,7 @@ Environment=CCC_MANAGED_PARENT=/managed/datasets
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 RuntimeDirectory=ccc-layered
 RuntimeDirectoryMode=0755
-ExecStart=/usr/bin/env ccc-layered-mountd --nfs-root ${CCC_NFS_ROOT} --run-dir ${CCC_NODE_RUN_DIR} --socket ${CCC_MOUNTD_SOCK} --managed-parent ${CCC_MANAGED_PARENT}
+ExecStart=/usr/bin/env ccc-storage mountd --nfs-root ${CCC_NFS_ROOT} --run-dir ${CCC_NODE_RUN_DIR} --socket ${CCC_MOUNTD_SOCK} --managed-parent ${CCC_MANAGED_PARENT}
 Restart=on-failure
 RestartSec=2s
 # Host-level daemon: needs local FUSE/mount capability on nodes where real FUSE

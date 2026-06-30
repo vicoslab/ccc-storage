@@ -42,21 +42,16 @@ def pack_object_dir(packs_root: str | Path, child_id: str) -> Path:
 
 
 def is_overlayfs_artifact(path: str | Path) -> bool:
-    """True for overlay/fuse-overlayfs whiteout metadata, not user files.
-
-    Current delta packs record added/modified regular content. Deletion
-    tombstones require an explicit whiteout-aware format and must not leak the
-    implementation files (``.wh.*``) into user-visible SquashFS layers.
-    """
+    """True for overlay/fuse-overlayfs whiteout metadata."""
     return bool(_OVERLAY_WHITEOUT_RE.match(Path(path).name))
 
 
 def prepare_delta_source(src: str | Path, dst: str | Path) -> int:
-    """Copy a sealed overlay upper into *dst*, filtering overlay metadata.
+    """Copy a sealed overlay upper into *dst*, preserving whiteouts.
 
     Returns the number of copied regular files/symlinks. Directories are
-    recreated, ``.wh.*`` whiteout artifacts are skipped, and unsupported special
-    files are ignored so they cannot leak into immutable user-visible packs.
+    recreated, OverlayFS/fuse-overlayfs ``.wh.*`` artifacts are copied as
+    first-class tombstone records, and unsupported special files are ignored.
     """
     src_path = Path(src)
     dst_path = Path(dst)
@@ -66,8 +61,6 @@ def prepare_delta_source(src: str | Path, dst: str | Path) -> int:
     dst_path.mkdir(parents=True, exist_ok=True)
     for entry in sorted(src_path.rglob("*")):
         rel = entry.relative_to(src_path)
-        if any(is_overlayfs_artifact(part) for part in rel.parts):
-            continue
         target = dst_path / rel
         if entry.is_symlink():
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -239,7 +232,7 @@ def build_pack(
         raise PackBuildError("mksquashfs not found; install squashfs-tools in the ccc-dev env")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="ccc-pack-src-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="ccc-storage-pack-src-") as tmp:
         pack_src = src_path
         excludes = _combined_excludes(
             src_path,

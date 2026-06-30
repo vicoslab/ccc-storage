@@ -9,10 +9,10 @@ smoke scripts live under `dev/`.
 ```text
 deploy/
   docker/
-    mountd.Dockerfile          # dedicated ccc-layered-mountd service image
+    mountd.Dockerfile          # dedicated ccc-storage mountd service image
     mountd-entrypoint.sh       # entrypoint used by the mountd image
   systemd/
-    ccc-layered-mountd.service # opt-in host-level systemd unit template
+    ccc-storage-mountd.service # opt-in host-level systemd unit template
     install.sh                 # copy/reload helper; does not enable/start
     uninstall.sh               # remove/reload helper
 ```
@@ -22,7 +22,7 @@ deploy/
 Build the dedicated runtime image from the repository root:
 
 ```bash
-docker build -f deploy/docker/mountd.Dockerfile -t ccc-layered-mountd:local .
+docker build -f deploy/docker/mountd.Dockerfile -t ccc-layered-storage-mountd:local .
 ```
 
 `mountd.Dockerfile` installs the package with its manifest/FUSE runtime extras,
@@ -32,14 +32,14 @@ image.
 
 ## Systemd unit
 
-`deploy/systemd/ccc-layered-mountd.service` is an opt-in template for running the
+`deploy/systemd/ccc-storage-mountd.service` is an opt-in template for running the
 mount daemon as a host service. The install helper copies the unit and runs
 `systemctl daemon-reload`; it deliberately does not enable or start the service.
 
 ```bash
 sudo deploy/systemd/install.sh
 # edit environment/paths for the target host, then enable/start explicitly
-sudo systemctl enable --now ccc-layered-mountd.service
+sudo systemctl enable --now ccc-storage-mountd.service
 ```
 
 Use `deploy/systemd/uninstall.sh` to remove the unit and reload systemd.

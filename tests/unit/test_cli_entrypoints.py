@@ -2,12 +2,14 @@
 
 Phase-00 CLIs do no mounting/packing/NFS mutation. We assert they exit 0, that
 ``--version`` prints the package version, and that the implemented offline bits
-(``ccc-layered doctor``, ``ccc-layered-mountd --probe``) behave safely.
+(``ccc-storage doctor``, ``ccc-storage mountd --probe``) behave safely.
 """
 
 from __future__ import annotations
 
 import pytest
+import tomllib
+from pathlib import Path
 
 from ccc_layered_cli import __version__ as cli_version
 from ccc_layered_cli.main import main as cli_main
@@ -17,20 +19,60 @@ from ccc_layered_mountd import __version__ as mountd_version
 from ccc_layered_mountd.daemon import main as mountd_main
 from ccc_layered_pack import __version__ as pack_version
 from ccc_layered_pack.cli import main as pack_main
+from ccc_storage.main import main as storage_main
 
-# (main, version, prog-name) for the four entry points.
+ROOT = Path(__file__).resolve().parents[2]
+
+# (main, version, prog-name) for the tool namespace implementations.
 ENTRIES = [
-    (pack_main, pack_version, "ccc-pack"),
-    (mountd_main, mountd_version, "ccc-layered-mountd"),
-    (cli_main, cli_version, "ccc-layered"),
-    (hpc_main, hpc_version, "ccc-layered-hpc"),
+    (pack_main, pack_version, "ccc-storage pack"),
+    (mountd_main, mountd_version, "ccc-storage mountd"),
+    (cli_main, cli_version, "ccc-storage"),
+    (hpc_main, hpc_version, "ccc-storage hpc"),
 ]
+
+
+def test_pyproject_exports_only_unified_console_script() -> None:
+    data = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    assert data["project"]["scripts"] == {"ccc-storage": "ccc_storage.main:main"}
+
+
+def test_storage_top_level_help_lists_tool_namespaces_and_direct_ops(capsys) -> None:
+    assert storage_main([]) == 0
+    out = capsys.readouterr().out
+    for phrase in (
+        "ccc-storage pack",
+        "mountd",
+        "hpc",
+        "conda",
+        "mamba",
+        "benchmark",
+        "doctor",
+        "commit",
+    ):
+        assert phrase in out
+
+
+def test_storage_dispatches_tool_namespace_version(capsys) -> None:
+    with pytest.raises(SystemExit) as ei:
+        storage_main(["pack", "--version"])
+    assert ei.value.code == 0
+    assert "ccc-storage pack" in capsys.readouterr().out
+
+
+def test_storage_dispatches_direct_control_command(capsys, monkeypatch) -> None:
+    monkeypatch.delenv("CCC_NFS_ROOT", raising=False)
+    monkeypatch.setenv("CCC_MOUNTD_SOCK", "/nonexistent/ccc-mountd.sock")
+    assert storage_main(["doctor"]) == 0
+    out = capsys.readouterr().out
+    assert "ccc-storage doctor" in out
+    assert "mountd socket" in out.lower()
 
 
 @pytest.mark.parametrize("main, _version, prog", ENTRIES)
 def test_no_args_exits_zero(main, _version, prog, capsys) -> None:
     code = main([])
-    if prog == "ccc-layered-mountd":
+    if prog == "ccc-storage mountd":
         assert code == 2
     else:
         assert code == 0
@@ -105,4 +147,4 @@ def test_cli_status_requires_path(capsys) -> None:
 
 def test_cli_no_subcommand_prints_help(capsys) -> None:
     assert cli_main([]) == 0
-    assert "ccc-layered" in capsys.readouterr().out
+    assert "ccc-storage" in capsys.readouterr().out

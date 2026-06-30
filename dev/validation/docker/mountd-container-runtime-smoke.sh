@@ -8,7 +8,7 @@ set -euo pipefail
 #   app container: unprivileged, no /dev/fuse, no mountd socket/env, sees only an rslave storage bind
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-image_tag="${CCC_MOUNTD_IMAGE:-ccc-layered-mountd:local}"
+image_tag="${CCC_MOUNTD_IMAGE:-ccc-layered-storage-mountd:local}"
 app_image="${CCC_APP_IMAGE:-$image_tag}"
 runtime_root="${CCC_RUNTIME_ROOT:-/storage/user/ccc-layered-storage-mountd-container-test}"
 run_id="${CCC_RUNTIME_RUN_ID:-$(hostname)-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
@@ -17,7 +17,7 @@ docker_source_root="${CCC_RUNTIME_DOCKER_SOURCE_ROOT:-}"
 keep="${CCC_RUNTIME_KEEP:-0}"
 skip_build="${CCC_RUNTIME_SKIP_BUILD:-0}"
 timeout_s="${CCC_MOUNTD_CONTAINER_TIMEOUT:-180}"
-mountd_name="ccc-layered-mountd-test-$run_id"
+mountd_name="ccc-storage-mountd-test-$run_id"
 app_name="ccc-layered-app-test-$run_id"
 
 docker_bin="${DOCKER:-docker}"
@@ -124,13 +124,13 @@ if [ ! -e "$run_root/nfs/overlays/observe%3Anew-env/active/created.txt" ]; then
   exit 1
 fi
 
-"$docker_bin" exec "$mountd_name" ccc-layered umount observe:new-env --json >/tmp/ccc-layered-mountd-container-umount.json
-"$docker_bin" exec "$mountd_name" ccc-layered commit observe:new-env --json >/tmp/ccc-layered-mountd-container-commit.json
+"$docker_bin" exec "$mountd_name" ccc-storage umount observe:new-env --json >/tmp/ccc-storage-mountd-container-umount.json
+"$docker_bin" exec "$mountd_name" ccc-storage commit observe:new-env --json >/tmp/ccc-storage-mountd-container-commit.json
 
 "${PYTHON:-python3}" - <<'PY'
 import json
 from pathlib import Path
-path = Path('/tmp/ccc-layered-mountd-container-commit.json')
+path = Path('/tmp/ccc-storage-mountd-container-commit.json')
 data = json.loads(path.read_text())
 assert data['generation'] == 1, data
 assert data['overlay']['dirty'] is False, data

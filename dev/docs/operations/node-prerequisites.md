@@ -1,6 +1,6 @@
 # CCC layered storage node prerequisites
 
-`ccc-layered-mountd` is intended to run as a **host-level, opt-in daemon** on CCC
+`ccc-storage mountd` is intended to run as a **host-level, opt-in daemon** on CCC
 nodes. It is a local control plane for SquashFS/FUSE-backed managed paths; NFS
 remains the hot shared truth for manifests, overlays, and hot pack files.
 
@@ -23,7 +23,7 @@ Minimum read-only/runtime stack:
 - `/dev/fuse` available when using user-space FUSE adapters.
 - `fusermount3` available for unprivileged FUSE paths.
 - `fuse-overlayfs` or kernel OverlayFS for writable union/runtime lanes.
-- Python 3.11+ and the `ccc-layered-storage` package entry points on PATH.
+- Python 3.11+ and the `ccc-layered-storage` package `ccc-storage` entry point on PATH.
 
 Privileged host daemon mode:
 
@@ -45,7 +45,7 @@ Privileged host daemon mode:
 Run on a candidate node:
 
 ```bash
-ccc-layered-mountd --probe
+ccc-storage mountd --probe
 python -c "from tests.fakes.capability import CAPS; print(CAPS)"
 ```
 
@@ -57,7 +57,7 @@ dev/validation/local/runtime-smoke.sh
 ```
 
 The script creates a temporary root under `/tmp` by default, starts a local
-`ccc-layered-mountd`, exercises `ccc-layered doctor`, `create`, and `parent-ls`,
+`ccc-storage mountd`, exercises `ccc-storage doctor`, `create`, and `parent-ls`,
 then removes the scratch tree.
 
 For real SquashFS build/verify/extract plus an unprivileged FUSE mount check,
@@ -118,7 +118,7 @@ dev/validation/s3/s3-cold-hpc-smoke.sh
 ```
 
 This smoke creates a real dirty overlay for a dataset child, commits it through
-`ccc-layered-mountd` into a SquashFS delta pack, verifies the dirty file inside
+`ccc-storage mountd` into a SquashFS delta pack, verifies the dirty file inside
 the delta, archives the full committed pack stack to S3 cold storage, removes hot
 pack files, recalls them from S3 with checksum/size verification, builds and
 round-trips an external-HPC packset bundle, and round-trips an HPC output delta
@@ -153,7 +153,7 @@ dev/validation/docker/privileged-runtime-smoke.sh
 ```
 
 This smoke is intentionally privileged and intentionally no-sidecar. It does not
-use the CCC FUSE sidecar path; instead it starts `ccc-layered-mountd` inside the
+use the CCC FUSE sidecar path; instead it starts `ccc-storage mountd` inside the
 privileged container, mounts a SquashFS child pack, creates a writable
 `fuse-overlayfs` view over the shared overlay upper, bind-publishes that view
 through a `rshared` Docker bind, asks existing client containers to read/write
@@ -172,7 +172,7 @@ dev/validation/docker/nested-runtime-smoke.sh
 This smoke builds a parent/root SquashFS with `exclude_boundaries=[...]`, verifies
 by `unsquashfs` that the parent pack contains only parent files plus a
 `.ccc-boundary` mountpoint stub, stores the nested child SquashFS in a separate
-`packs/<child-id>/` namespace, then runs `ccc-layered mount-tree` through a real
+`packs/<child-id>/` namespace, then runs `ccc-storage mount-tree` through a real
 mountd socket to mount the child directly at the parent boundary path and read
 both parent and child data through the combined tree.
 
@@ -223,9 +223,9 @@ non-privileged validation lane.
 Then start against a non-production managed parent first:
 
 ```bash
-sudo systemctl start ccc-layered-mountd
-sudo systemctl status ccc-layered-mountd
-ccc-layered doctor
+sudo systemctl start ccc-storage-mountd
+sudo systemctl status ccc-storage-mountd
+ccc-storage doctor
 ```
 
 ## Rollback
@@ -233,7 +233,7 @@ ccc-layered doctor
 Stop the daemon and remove the unit:
 
 ```bash
-sudo systemctl stop ccc-layered-mountd
+sudo systemctl stop ccc-storage mountd
 sudo deploy/systemd/uninstall.sh
 ```
 

@@ -51,7 +51,16 @@ from ccc_layered_mountd.overlay import (
     local_overlay_paths,
     seal_active_upper,
 )
-from ccc_layered_mountd.workers.compaction import plan_compaction
+from ccc_layered_mountd.workers.compaction import (
+    build_partial_compaction,
+    plan_compaction,
+    publish_partial_compaction,
+)
+from ccc_layered_mountd.workers.levels import (
+    LevelPolicy,
+    choose_initial_level,
+    plan_level_compaction,
+)
 from ccc_layered_mountd.workers.policy import CommitPolicy, evaluate, overlay_inputs
 from ccc_layered_pack.builder import build_delta, pack_object_dir
 from ccc_layered_pack.verify import verify_pack
@@ -84,10 +93,12 @@ class MountdService:
         default_write_policy: str = WRITE_POLICY_SHARED_NFS,
         local_overlay_root: str | Path | None = None,
         node_id: str | None = None,
+        level_policy: LevelPolicy | None = None,
     ) -> None:
         self.nfs_root = Path(nfs_root)
         self.run_dir = Path(run_dir)
         self.default_write_policy = normalize_write_policy(default_write_policy)
+        self.level_policy = level_policy or LevelPolicy.from_env(os.environ)
         self.registry_dir = self.nfs_root / "registry"
         self.mounts = ChildMountManager(
             self.run_dir,
@@ -287,7 +298,14 @@ class MountdService:
         delta_dir.mkdir(parents=True, exist_ok=True)
         delta_pack = delta_dir / f"delta-g{new_generation:04d}.sqfs"
         result = build_delta(source, manifest, delta_pack)
-        verify_pack(delta_pack, result.pack)
+        pack = replace(
+            result.pack,
+            level=choose_initial_level(self.level_policy, result.pack.size),
+            generation_min=new_generation,
+            generation_max=new_generation,
+            kind="delta",
+        )
+        verify_pack(delta_pack, pack)
         paths = self.overlay_paths(manifest)
         updated = replace(
             manifest,
@@ -295,7 +313,7 @@ class MountdService:
             state="clean",
             pack_stack=PackStack(
                 active_revision=f"g{new_generation}",
-                lowers=(*manifest.pack_stack.lowers, result.pack),
+                lowers=(*manifest.pack_stack.lowers, pack),
             ),
             overlay=OverlayInfo(
                 mode=overlay_mode,
@@ -308,9 +326,120 @@ class MountdService:
         cleanup()
         self.reload_registry()
         committed = self.children[updated.id]
+        if self.level_policy.trigger_after_commit:
+            compacted = self._compact_if_needed(committed, allow_base=False)
+            if compacted is not None:
+                committed = compacted
         committed_status = self._manifest_status(committed)
         committed_status["message"] = message
         return committed_status
+
+    def _compact_if_needed(
+        self,
+        manifest: ChildManifest,
+        *,
+        allow_base: bool = False,
+    ) -> ChildManifest | None:
+        candidate = plan_level_compaction(
+            manifest.pack_stack.lowers,
+            self.level_policy,
+            allow_base=allow_base,
+        )
+        if candidate is None or candidate.blocked_reason:
+            return None
+        out = self._compaction_output_path(manifest, candidate.target_level, candidate.packs)
+        new_pack = build_partial_compaction(
+            tuple(candidate.packs),
+            out,
+            target_level=candidate.target_level,
+        )
+        updated, _retired = publish_partial_compaction(
+            manifest,
+            selected=tuple(candidate.packs),
+            new_pack=new_pack,
+            target_level=candidate.target_level,
+        )
+        dump_atomic(self.manifest_paths[manifest.id], updated)
+        self.reload_registry()
+        return self.children[manifest.id]
+
+    def _compaction_output_path(
+        self,
+        manifest: ChildManifest,
+        target_level: int,
+        selected: tuple[object, ...],
+    ) -> Path:
+        mins = [
+            getattr(pack, "generation_min", 0)
+            for pack in selected
+            if getattr(pack, "generation_min", 0)
+        ]
+        maxes = [
+            getattr(pack, "generation_max", 0)
+            for pack in selected
+            if getattr(pack, "generation_max", 0)
+        ]
+        generation_min = min(
+            mins,
+            default=manifest.generation,
+        )
+        generation_max = max(
+            maxes,
+            default=manifest.generation,
+        )
+        pack_dir = pack_object_dir(self.nfs_root / "packs", manifest.id)
+        pack_dir.mkdir(parents=True, exist_ok=True)
+        name = f"compact-L{target_level}-g{generation_min:04d}-g{generation_max:04d}.sqfs"
+        return pack_dir / name
+
+    def handle_compact(
+        self,
+        selector: str,
+        *,
+        dry_run: bool = False,
+        allow_base: bool = False,
+    ) -> dict[str, Any]:
+        manifest = self._find(selector)
+        candidate = plan_level_compaction(
+            manifest.pack_stack.lowers,
+            self.level_policy,
+            allow_base=allow_base,
+        )
+        base = {
+            "id": manifest.id,
+            "dry_run": dry_run,
+            "allow_base": allow_base,
+            "compacted": False,
+            "retired_packs": [],
+            "compaction": self._compaction_status(manifest, allow_base=allow_base),
+        }
+        if candidate is None or dry_run or candidate.blocked_reason:
+            return base
+
+        out = self._compaction_output_path(manifest, candidate.target_level, candidate.packs)
+        new_pack = build_partial_compaction(
+            tuple(candidate.packs),
+            out,
+            target_level=candidate.target_level,
+        )
+        updated, retired = publish_partial_compaction(
+            manifest,
+            selected=tuple(candidate.packs),
+            new_pack=new_pack,
+            target_level=candidate.target_level,
+        )
+        dump_atomic(self.manifest_paths[manifest.id], updated)
+        self.reload_registry()
+        status = self._manifest_status(self.children[manifest.id])
+        status.update(
+            {
+                "dry_run": False,
+                "allow_base": allow_base,
+                "compacted": True,
+                "retired_packs": [pack.path for pack in retired],
+            }
+        )
+        return status
 
     def handle_pin(self, selector: str, *, pinned: bool) -> dict[str, Any]:
         manifest = self._find(selector)
@@ -493,6 +622,15 @@ class MountdService:
                         message=str(request.payload.get("message", "")),
                     ),
                 )
+            if request.command == "compact":
+                return Response(
+                    ok=True,
+                    result=self.handle_compact(
+                        request.path,
+                        dry_run=bool(request.payload.get("dry_run", False)),
+                        allow_base=bool(request.payload.get("allow_base", False)),
+                    ),
+                )
             if request.command == "publish":
                 return Response(ok=True, result=self.handle_publish(request.path or None))
             if request.command == "pin":
@@ -620,7 +758,6 @@ class MountdService:
         inputs = overlay_inputs(policy_input_path, now=time.time())
         child_policy = replace(CommitPolicy(), mode=manifest.commit_mode or "auto")
         decision = evaluate(child_policy, inputs)
-        comp = plan_compaction(manifest)
         delta_count = max(0, len(manifest.pack_stack.lowers) - 1)
         return {
             "id": manifest.id,
@@ -641,10 +778,60 @@ class MountdService:
                 "decision": decision,
             },
             "compaction": {
-                "needed": comp is not None,
-                "reason": comp.reason if comp else "",
+                **self._legacy_compaction_status(manifest),
+                **self._compaction_status(manifest),
             },
         }
+
+    def _legacy_compaction_status(self, manifest: ChildManifest) -> dict[str, Any]:
+        comp = plan_compaction(manifest)
+        return {
+            "legacy_needed": comp is not None,
+            "legacy_reason": comp.reason if comp else "",
+        }
+
+    def _compaction_status(
+        self,
+        manifest: ChildManifest,
+        *,
+        allow_base: bool = False,
+    ) -> dict[str, Any]:
+        candidate = plan_level_compaction(
+            manifest.pack_stack.lowers,
+            self.level_policy,
+            allow_base=allow_base,
+        )
+        if candidate is None:
+            return {
+                "needed": False,
+                "reason": "",
+                "target_level": None,
+                "selected_packs": [],
+                "total_bytes": 0,
+                "blocked_reason": "",
+            }
+        return {
+            "needed": True,
+            "reason": candidate.reason,
+            "target_level": candidate.target_level,
+            "selected_packs": [pack.path for pack in candidate.packs],
+            "total_bytes": candidate.total_bytes,
+            "blocked_reason": candidate.blocked_reason,
+        }
+
+    def run_background_compaction_once(self) -> list[dict[str, Any]]:
+        """Run one safe background compaction pass over eligible children."""
+        self.reload_registry()
+        results: list[dict[str, Any]] = []
+        for manifest in sorted(self.children.values(), key=lambda item: item.id):
+            mount_status = self.mounts.status(manifest)
+            if mount_status.get("mounted") and mount_status.get("mode") == "rw":
+                continue
+            candidate = plan_level_compaction(manifest.pack_stack.lowers, self.level_policy)
+            if candidate is None or candidate.blocked_reason:
+                continue
+            results.append(self.handle_compact(manifest.id))
+        return results
 
 
 def _safe_child_name(value: str) -> str:
@@ -659,7 +846,7 @@ def _probe_summary_dict() -> dict[str, Any]:
 
 def _probe_summary() -> list[str]:
     runtime = _probe_summary_dict()
-    lines = ["ccc-layered-mountd runtime probe (lightweight):"]
+    lines = ["ccc-storage mountd runtime probe (lightweight):"]
     lines.append(f"  /dev/fuse rw      : {'yes' if runtime['dev_fuse_rw'] else 'no'}")
     for name, path in runtime["binaries"].items():
         lines.append(f"  {name:<16}: {path or 'MISSING'}")
@@ -696,10 +883,12 @@ def _serve_forever(
     idle_unmount_ttl: float = 0.0,
     idle_reap_interval: float = 30.0,
     dirty_publish_interval: float = 1.0,
+    compaction_interval: float = 0.0,
 ) -> int:
     stop = False
     next_reap = time.monotonic() + max(idle_reap_interval, 0.1)
     next_publish = time.monotonic() + max(dirty_publish_interval, 0.1)
+    next_compact = time.monotonic() + max(compaction_interval, 0.1)
 
     def _handler(signum, frame):  # type: ignore[no-untyped-def]
         nonlocal stop
@@ -721,6 +910,10 @@ def _serve_forever(
                 with contextlib.suppress(Exception):
                     service.publish_dirty_epochs()
                 next_publish = now + max(dirty_publish_interval, 0.1)
+            if compaction_interval > 0 and now >= next_compact:
+                with contextlib.suppress(Exception):
+                    service.run_background_compaction_once()
+                next_compact = now + max(compaction_interval, 0.1)
             time.sleep(0.2)
     finally:
         with contextlib.suppress(Exception):
@@ -732,12 +925,12 @@ def _serve_forever(
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, prog: str = "ccc-storage mountd") -> int:
     parser = argparse.ArgumentParser(
-        prog="ccc-layered-mountd",
+        prog=prog,
         description="Per-node layered-storage daemon.",
     )
-    parser.add_argument("--version", action="version", version=f"ccc-layered-mountd {__version__}")
+    parser.add_argument("--version", action="version", version=f"{prog} {__version__}")
     parser.add_argument("--probe", action="store_true", help="print runtime-ingredient summary")
     parser.add_argument("--nfs-root", default=os.environ.get("CCC_NFS_ROOT", ""))
     parser.add_argument("--run-dir", default=os.environ.get("CCC_NODE_RUN_DIR", "/run/ccc-layered"))
@@ -786,6 +979,12 @@ def main(argv: list[str] | None = None) -> int:
         help="seconds between best-effort local-ssd-async dirty mirror publishes",
     )
     parser.add_argument(
+        "--compaction-interval",
+        type=float,
+        default=float(os.environ.get("CCC_COMPACT_INTERVAL_SECONDS", "0")),
+        help="seconds between safe background log-structured compaction passes; <=0 disables",
+    )
+    parser.add_argument(
         "--observe-ready-timeout",
         type=float,
         default=float(os.environ.get("CCC_OBSERVE_READY_TIMEOUT", "10")),
@@ -815,7 +1014,7 @@ def main(argv: list[str] | None = None) -> int:
         print("\n".join(_probe_summary()))
         return 0
     if not ns.nfs_root:
-        print("ccc-layered-mountd: --nfs-root or $CCC_NFS_ROOT is required")
+        print(f"{prog}: --nfs-root or $CCC_NFS_ROOT is required")
         return 2
 
     service = MountdService(
@@ -831,7 +1030,7 @@ def main(argv: list[str] | None = None) -> int:
     service.reload_registry()
     if ns.observe_mountpoint:
         if not ns.observe_root:
-            print("ccc-layered-mountd: --observe-mountpoint requires --observe-root")
+            print(f"{prog}: --observe-mountpoint requires --observe-root")
             return 2
         Path(ns.observe_mountpoint).mkdir(parents=True, exist_ok=True)
 
@@ -839,13 +1038,13 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 mount_observation_dispatcher(service, ns.observe_root, ns.observe_mountpoint)
             except Exception as exc:
-                print(f"ccc-layered-mountd: observation dispatcher failed: {exc}", flush=True)
+                print(f"{prog}: observation dispatcher failed: {exc}", flush=True)
                 traceback.print_exc()
                 os._exit(3)
 
         threading.Thread(
             target=_run_observation_fuse,
-            name="ccc-layered-observe-fuse",
+            name="ccc-storage-observe-fuse",
             daemon=True,
         ).start()
         if ns.observe_ready_timeout > 0 and not _wait_for_mountpoint(
@@ -853,7 +1052,7 @@ def main(argv: list[str] | None = None) -> int:
             ns.observe_ready_timeout,
         ):
             print(
-                f"ccc-layered-mountd: observation mountpoint not ready after "
+                f"{prog}: observation mountpoint not ready after "
                 f"{ns.observe_ready_timeout:g}s: {ns.observe_mountpoint}",
                 flush=True,
             )
@@ -865,7 +1064,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         socket_mode = int(str(ns.socket_mode), 8)
     except ValueError:
-        print("ccc-layered-mountd: --socket-mode must be an octal mode such as 0600 or 0660")
+        print(f"{prog}: --socket-mode must be an octal mode such as 0600 or 0660")
         return 2
     server = ControlServer(socket_path, service, socket_mode=socket_mode)
     return _serve_forever(
@@ -875,6 +1074,7 @@ def main(argv: list[str] | None = None) -> int:
         idle_unmount_ttl=ns.idle_unmount_ttl,
         idle_reap_interval=ns.idle_reap_interval,
         dirty_publish_interval=ns.dirty_publish_interval,
+        compaction_interval=ns.compaction_interval,
     )
 
 

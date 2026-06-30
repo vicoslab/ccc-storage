@@ -103,7 +103,7 @@ def _shim_run_dir(env: EnvMap) -> str:
         return explicit
     runtime = env.get("XDG_RUNTIME_DIR", "").strip()
     if runtime:
-        return str(Path(runtime) / "ccc-layered")
+        return str(Path(runtime) / "ccc-storage")
     return f"/tmp/ccc-layered-{os.getuid()}"
 
 

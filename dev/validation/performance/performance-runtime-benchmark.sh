@@ -6,15 +6,15 @@ set -euo pipefail
 # Compares, in the same Docker/FUSE runtime:
 #   1. direct node-local SSD bind
 #   2. direct NFS bind
-#   3. ccc-layered shared-nfs child (fuse-overlayfs with NFS upper/work)
-#   4. ccc-layered local-ssd-async child (kernel OverlayFS with local upper/work)
+#   3. ccc-storage shared-nfs child (fuse-overlayfs with NFS upper/work)
+#   4. ccc-storage local-ssd-async child (kernel OverlayFS with local upper/work)
 #
 # Default workloads intentionally cover both requested shapes:
 #   - image-small: thousands of image-like files, 500 KiB-class payloads
 #   - large-files: few files, each >100 MiB
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-image_tag="${CCC_MOUNTD_IMAGE:-ccc-layered-mountd:local}"
+image_tag="${CCC_MOUNTD_IMAGE:-ccc-layered-storage-mountd:local}"
 app_image="${CCC_APP_IMAGE:-$image_tag}"
 runtime_root="${CCC_RUNTIME_ROOT:-/storage/user/ccc-layered-storage-performance-test}"
 local_ssd_root="${CCC_LOCAL_SSD_ROOT:-/tmp/ccc-layered-storage-performance-local}"
@@ -143,7 +143,7 @@ run_target_bench() {
   local size_flag=$5
   local size_value=$6
   local seed=$7
-  "$docker_bin" exec "$app_name" ccc-layered-benchmark \
+  "$docker_bin" exec "$app_name" ccc-storage benchmark \
     --root "$root" \
     --target "$target" \
     --workload-name "$workload" \
@@ -174,17 +174,17 @@ run_workload() {
   "$docker_bin" exec "$app_name" sh -lc "ls -la /storage/layered/$shared_child >/dev/null 2>&1 || true"
   wait_for_mount "$app_name" "/storage/layered/$shared_child"
   run_target_bench "$workload" layered-shared-nfs "/storage/layered/$shared_child" "$files" "$size_flag" "$size_value" "$seed"
-  "$docker_bin" exec "$writer_name" ccc-layered umount "observe:$shared_child" --json >/tmp/ccc-layered-${shared_child}-umount.json
-  "$docker_bin" exec "$writer_name" ccc-layered commit "observe:$shared_child" --json >/tmp/ccc-layered-${shared_child}-commit.json
+  "$docker_bin" exec "$writer_name" ccc-storage umount "observe:$shared_child" --json >/tmp/ccc-layered-${shared_child}-umount.json
+  "$docker_bin" exec "$writer_name" ccc-storage commit "observe:$shared_child" --json >/tmp/ccc-layered-${shared_child}-commit.json
 
-  "$docker_bin" exec "$writer_name" ccc-layered observe-mkdir "$local_child" --json >/tmp/ccc-layered-${local_child}-create.json
-  "$docker_bin" exec "$writer_name" ccc-layered write-policy "observe:$local_child" local-ssd-async --json >/tmp/ccc-layered-${local_child}-policy.json
+  "$docker_bin" exec "$writer_name" ccc-storage observe-mkdir "$local_child" --json >/tmp/ccc-layered-${local_child}-create.json
+  "$docker_bin" exec "$writer_name" ccc-storage write-policy "observe:$local_child" local-ssd-async --json >/tmp/ccc-layered-${local_child}-policy.json
   "$docker_bin" exec "$app_name" sh -lc "ls -la /storage/layered/$local_child >/dev/null"
   wait_for_mount "$app_name" "/storage/layered/$local_child"
   run_target_bench "$workload" layered-local-ssd-async "/storage/layered/$local_child" "$files" "$size_flag" "$size_value" "$seed"
-  "$docker_bin" exec "$writer_name" ccc-layered publish "observe:$local_child" --json >/tmp/ccc-layered-${local_child}-publish.json
-  "$docker_bin" exec "$writer_name" ccc-layered umount "observe:$local_child" --json >/tmp/ccc-layered-${local_child}-umount.json
-  "$docker_bin" exec "$writer_name" ccc-layered commit "observe:$local_child" --json >/tmp/ccc-layered-${local_child}-commit.json
+  "$docker_bin" exec "$writer_name" ccc-storage publish "observe:$local_child" --json >/tmp/ccc-layered-${local_child}-publish.json
+  "$docker_bin" exec "$writer_name" ccc-storage umount "observe:$local_child" --json >/tmp/ccc-layered-${local_child}-umount.json
+  "$docker_bin" exec "$writer_name" ccc-storage commit "observe:$local_child" --json >/tmp/ccc-layered-${local_child}-commit.json
   "$docker_bin" exec "$app_name" sh -lc "ls -la /storage/layered/$local_child >/dev/null 2>&1 || true"
   wait_for_mount "$app_name" "/storage/layered/$local_child"
   "$docker_bin" exec "$app_name" sh -lc "test -s /storage/layered/$local_child/class_000/img_000000.jpg"
@@ -260,4 +260,4 @@ if not summary["validation"]["passed"]:
     raise SystemExit("performance validation failed")
 PY
 
-printf 'ccc-layered performance benchmark passed\n'
+printf 'ccc-storage performance benchmark passed\n'

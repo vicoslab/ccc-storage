@@ -4,7 +4,7 @@ set -euo pipefail
 # End-to-end S3 cold-tier and external-HPC exchange smoke.
 #
 # This validates the integrated path that the simpler S3 smoke does not cover:
-# dirty folder data -> ccc-layered commit -> SquashFS delta pack -> S3 cold
+# dirty folder data -> ccc-storage commit -> SquashFS delta pack -> S3 cold
 # archive -> cold recall -> external-HPC packset/upload/download -> HPC output
 # delta import-queue metadata.
 #

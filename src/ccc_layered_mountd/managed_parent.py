@@ -37,7 +37,7 @@ from ccc_layered_mountd.overlay import (
 
 # Names that are internal bookkeeping, never real children. Hidden from listings
 # and refused as child names (RK-8).
-_HIDDEN_NAMES = frozenset({".ccc-layered", "ccc-layered"})
+_HIDDEN_NAMES = frozenset({".ccc-layered", "ccc-layered", "ccc-storage"})
 
 
 class ManagedParentError(RuntimeError):
@@ -213,7 +213,7 @@ class ManagedParent:
         """rmdir policy: only empty, uncommitted (generation-0) children go.
 
         Committed children (any packs / generation > 0) and children with a
-        dirty overlay are refused with a clear, ``ccc-layered``-referencing
+        dirty overlay are refused with a clear, ``ccc-storage``-referencing
         error rather than silently dropped (D-21 spirit).
         """
         src = self.manifest_path(name)
@@ -223,7 +223,7 @@ class ManagedParent:
         if manifest.generation > 0 or manifest.pack_stack.lowers:
             raise ManagedParentError(
                 f"refusing to rmdir committed child {name!r}: it has committed packs "
-                f"(generation {manifest.generation}). Use `ccc-layered` to manage it."
+                f"(generation {manifest.generation}). Use `ccc-storage` to manage it."
             )
         overlay_paths = self._overlay_paths(manifest)
         stats = dirty_stats(overlay_paths.active_upper)

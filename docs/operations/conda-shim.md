@@ -3,8 +3,8 @@
 The package provides conservative wrappers:
 
 ```bash
-ccc-conda ...
-ccc-mamba ...
+ccc-storage conda ...
+ccc-storage mamba ...
 ```
 
 They are safe to install in CCC images because they pass through to real
@@ -50,7 +50,7 @@ returns the real command exit code.  Lock contention returns `75` (`EX_TEMPFAIL`
 ## Mark a conda env root for observation
 
 ```bash
-ccc-layered init-conda-envs /storage/user/layered-source/conda/envs
+ccc-storage init-conda-envs /storage/user/layered-source/conda/envs
 ```
 
 This creates the `CCC_LAYERED_OBSERVE` marker so mountd can treat immediate child
@@ -60,5 +60,5 @@ folders as independently committed layered envs.
 
 Do not overwrite real `conda`/`mamba` by default.  If transparent behavior is
 wanted, place tiny shell wrappers named `conda`/`mamba` in an admin-controlled
-shim directory that calls `ccc-conda`/`ccc-mamba`, then prepend only that
+shim directory that calls `ccc-storage conda`/`ccc-storage mamba`, then prepend only that
 directory to `PATH` in selected CCC images.

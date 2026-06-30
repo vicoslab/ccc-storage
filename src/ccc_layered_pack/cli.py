@@ -1,4 +1,4 @@
-"""`ccc-pack` CLI for immutable SquashFS pack operations."""
+"""`ccc-storage pack` CLI for immutable SquashFS pack operations."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def _cmd_build(ns: argparse.Namespace) -> int:
         )
         return 0
     except PackBuildError as exc:
-        print(f"ccc-pack build: {exc}")
+        print(f"ccc-storage pack build: {exc}")
         return 2
 
 
@@ -50,7 +50,7 @@ def _cmd_verify(ns: argparse.Namespace) -> int:
         print(json.dumps(result.__dict__, indent=2, sort_keys=True))
         return 0
     except VerificationError as exc:
-        print(f"ccc-pack verify: {exc}")
+        print(f"ccc-storage pack verify: {exc}")
         return 2
 
 
@@ -60,12 +60,12 @@ def _cmd_manifest_show(ns: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, prog: str = "ccc-storage pack") -> int:
     parser = argparse.ArgumentParser(
-        prog="ccc-pack",
+        prog=prog,
         description="Build and inspect CCC immutable SquashFS packs.",
     )
-    parser.add_argument("--version", action="version", version=f"ccc-pack {__version__}")
+    parser.add_argument("--version", action="version", version=f"{prog} {__version__}")
     sub = parser.add_subparsers(dest="cmd")
 
     build = sub.add_parser("build", help="build a SquashFS pack from a source directory")

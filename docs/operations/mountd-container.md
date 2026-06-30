@@ -1,6 +1,6 @@
 # Mountd container operation
 
-`ccc-layered-mountd` should run as a dedicated Docker container.  Normal CCC app
+`ccc-storage mountd` should run as a dedicated Docker container.  Normal CCC app
 containers do not need to know about mountd.
 
 ## Required container properties
@@ -24,7 +24,7 @@ App containers:
 ## Build image
 
 ```bash
-docker build -f deploy/docker/mountd.Dockerfile -t ccc-layered-mountd:local .
+docker build -f deploy/docker/mountd.Dockerfile -t ccc-layered-storage-mountd:local .
 ```
 
 ## Development smoke topology
@@ -33,7 +33,7 @@ A repository checkout includes a development-only Docker/FUSE smoke for this
 mountd/app-container topology:
 
 ```bash
-CCC_MOUNTD_IMAGE=ccc-layered-mountd:local \
+CCC_MOUNTD_IMAGE=ccc-layered-storage-mountd:local \
 dev/validation/docker/mountd-container-runtime-smoke.sh
 ```
 

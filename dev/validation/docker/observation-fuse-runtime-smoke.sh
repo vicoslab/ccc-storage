@@ -4,7 +4,7 @@ set -euo pipefail
 # Live pyfuse3 marker-observation runtime smoke.
 #
 # Validates the deployable transparent path:
-#   - ccc-layered-mountd serves a live pyfuse3 observation root;
+#   - ccc-storage mountd serves a live pyfuse3 observation root;
 #   - mkdir through the published folder creates a generation-0 observed child;
 #   - the live FUSE mkdir path mounts a writable shared-overlay child immediately;
 #   - writes land in the shared overlay, not the source tree;
@@ -149,7 +149,7 @@ mountd_pid=""
 cleanup() {
   set +e
   export CCC_NFS_ROOT="$nfs" CCC_MOUNTD_SOCK="$socket_path"
-  ccc-layered umount observe:new-env --json >/dev/null 2>&1 || true
+  ccc-storage umount observe:new-env --json >/dev/null 2>&1 || true
   if command -v fusermount3 >/dev/null 2>&1; then
     fusermount3 -u -z "$published/new-env" >/dev/null 2>&1 || true
     fusermount3 -u -z "$published" >/dev/null 2>&1 || true
@@ -180,7 +180,7 @@ export CCC_NFS_ROOT="$nfs"
 export CCC_NODE_RUN_DIR="$run"
 export CCC_MOUNTD_SOCK="$socket_path"
 
-ccc-layered-mountd \
+ccc-storage mountd \
   --nfs-root "$nfs" \
   --run-dir "$run" \
   --socket "$socket_path" \
@@ -190,7 +190,7 @@ mountd_pid="$!"
 
 for _ in $(seq 1 120); do
   if ! kill -0 "$mountd_pid" 2>/dev/null; then
-    echo "ccc-layered-mountd exited before ready" >&2
+    echo "ccc-storage mountd exited before ready" >&2
     sed -n '1,240p' "$mountd_log" >&2 || true
     exit 1
   fi
@@ -206,8 +206,8 @@ if [ ! -S "$socket_path" ] || ! mountpoint -q "$published"; then
   exit 1
 fi
 
-ccc-layered doctor --json >"$root/doctor.json"
-ccc-layered observe-ls --json >"$root/observe-before.json"
+ccc-storage doctor --json >"$root/doctor.json"
+ccc-storage observe-ls --json >"$root/observe-before.json"
 
 mkdir "$published/new-env"
 for _ in $(seq 1 80); do
@@ -218,7 +218,7 @@ for _ in $(seq 1 80); do
 done
 if ! mountpoint -q "$published/new-env"; then
   echo "new observed child was not mounted after live FUSE mkdir" >&2
-  ccc-layered status observe:new-env --json >&2 || true
+  ccc-storage status observe:new-env --json >&2 || true
   sed -n '1,240p' "$mountd_log" >&2 || true
   findmnt -R "$root" >&2 || true
   exit 1
@@ -239,8 +239,8 @@ if [ ! -f "$nfs/overlays/observe%3Anew-env/active/created.txt" ]; then
   exit 1
 fi
 
-ccc-layered status observe:new-env --json >"$root/status-before-commit.json"
-ccc-layered umount observe:new-env --json >"$root/pre-commit-umount.json"
+ccc-storage status observe:new-env --json >"$root/status-before-commit.json"
+ccc-storage umount observe:new-env --json >"$root/pre-commit-umount.json"
 for _ in $(seq 1 80); do
   if ! mountpoint -q "$published/new-env"; then
     break
@@ -253,7 +253,7 @@ if mountpoint -q "$published/new-env"; then
   exit 1
 fi
 
-ccc-layered commit observe:new-env -m 'live observation FUSE smoke' --json >"$root/commit.json"
+ccc-storage commit observe:new-env -m 'live observation FUSE smoke' --json >"$root/commit.json"
 python - <<'PY'
 import json
 from pathlib import Path
@@ -281,7 +281,7 @@ for _ in $(seq 1 80); do
 done
 if [ "$(cat "$published/new-env/created.txt")" != "created through live pyfuse3 dispatcher" ]; then
   echo "committed file was not readable after remount" >&2
-  ccc-layered status observe:new-env --json >&2 || true
+  ccc-storage status observe:new-env --json >&2 || true
   sed -n '1,240p' "$mountd_log" >&2 || true
   findmnt -R "$root" >&2 || true
   exit 1
@@ -290,7 +290,7 @@ if [ "$(cat "$published/new-env/nested/payload.txt")" != "nested payload" ]; the
   echo "committed nested file was not readable after remount" >&2
   exit 1
 fi
-ccc-layered status observe:new-env --json >"$root/status-after-remount.json"
+ccc-storage status observe:new-env --json >"$root/status-after-remount.json"
 
 python - <<'PY'
 import json

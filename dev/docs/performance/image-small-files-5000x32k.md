@@ -1,6 +1,6 @@
 # Image-like small-file benchmark
 
-Real Docker/FUSE benchmark run on `donbot` inside the `ccc-layered-mountd:phase14` image.
+Real Docker/FUSE benchmark run on `donbot` inside the `ccc-storage mountd:phase14` image.
 
 ## Workload
 

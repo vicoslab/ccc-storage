@@ -28,7 +28,6 @@ dependencies:
   # --- core libs ---
   - tomli                 # TOML read (stdlib tomllib also available on 3.11)
   - tomli-w               # TOML atomic write
-  - click                 # CLI framework (stubs use argparse; click arrives with real commands)
   - zstandard             # packset bundle compression
   - filelock              # advisory helper; NFS-safe locks use O_EXCL (see README §6)
   # --- s3 / hpc ---

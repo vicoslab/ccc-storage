@@ -163,7 +163,7 @@ def test_rmdir_refuses_committed_child_with_clear_error(fake_nfs, tmp_path):
 
     with pytest.raises(ManagedParentError) as excinfo:
         mp.remove_child("committed")
-    assert "ccc-layered" in str(excinfo.value)
+    assert "ccc-storage" in str(excinfo.value)
     assert mp.manifest_path("committed").exists()
 
 

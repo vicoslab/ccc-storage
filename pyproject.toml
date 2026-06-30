@@ -33,17 +33,11 @@ dev = [
 ]
 
 [project.scripts]
-ccc-pack = "ccc_layered_pack.cli:main"
-ccc-layered-mountd = "ccc_layered_mountd.daemon:main"
-ccc-layered = "ccc_layered_cli.main:main"
-ccc-layered-hpc = "ccc_layered_hpc.client:main"
-ccc-conda = "ccc_layered_cli.conda_shim:main_conda"
-ccc-mamba = "ccc_layered_cli.conda_shim:main_mamba"
-ccc-layered-benchmark = "ccc_layered_bench.perf:main"
+ccc-storage = "ccc_storage.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["ccc_layered_*"]
+include = ["ccc_layered_*", "ccc_storage*"]
 
 [tool.pytest.ini_options]
 # src/ makes the packages importable without an install; "." makes the

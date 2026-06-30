@@ -213,7 +213,7 @@ run_id="${hostname_safe}-${timestamp}-$$"
 run_id_safe="$(safe_name "$run_id")"
 run_root="$runtime_root_real/runs/$run_id_safe"
 docker_run_root_source="$docker_source_root_real/runs/$run_id_safe"
-container_name="ccc-layered-mountd-smoke-$run_id_safe"
+container_name="ccc-storage-mountd-smoke-$run_id_safe"
 
 if [ "${CCC_SKIP_BUILD:-}" != "1" ]; then
   "$docker_bin" build -t "$tag" "$repo_root"
@@ -349,7 +349,7 @@ fi
 request_container_seal "$container_name"
 
 "$docker_bin" exec "$container_name" sh -lc \
-  "set -eu; export CCC_NFS_ROOT='$NFS_ROOT' CCC_MOUNTD_SOCK='$MOUNTD_SOCKET'; ccc-layered status '$CHILD_ID' --json >/ccc-runtime/status-after-client.json; ccc-layered commit '$CHILD_ID' -m 'privileged runtime smoke' --json >/ccc-runtime/commit.json"
+  "set -eu; export CCC_NFS_ROOT='$NFS_ROOT' CCC_MOUNTD_SOCK='$MOUNTD_SOCKET'; ccc-storage status '$CHILD_ID' --json >/ccc-runtime/status-after-client.json; ccc-storage commit '$CHILD_ID' -m 'privileged runtime smoke' --json >/ccc-runtime/commit.json"
 
 generation="$("$python_bin" - "$run_root/commit.json" <<'PY'
 import json
@@ -374,8 +374,8 @@ fi
 "$docker_bin" exec "$container_name" sh -lc \
   "set -eu
    export CCC_NFS_ROOT='$NFS_ROOT' CCC_MOUNTD_SOCK='$MOUNTD_SOCKET'
-   ccc-layered umount '$CHILD_ID' --json >/ccc-runtime/post-commit-umount.json || true
-   ccc-layered mount '$CHILD_ID' --json >/ccc-runtime/post-commit-mount.json
+   ccc-storage umount '$CHILD_ID' --json >/ccc-runtime/post-commit-umount.json || true
+   ccc-storage mount '$CHILD_ID' --json >/ccc-runtime/post-commit-mount.json
    python - /ccc-runtime/post-commit-mount.json <<'PY'
 import json
 import sys

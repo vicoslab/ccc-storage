@@ -1,4 +1,4 @@
-"""`ccc-layered` user/container CLI."""
+"""`ccc-storage` user/container CLI."""
 
 from __future__ import annotations
 
@@ -21,6 +21,33 @@ _NOT_IMPLEMENTED = {
     "import": "phase-03",
     "hpc-export": "phase-08",
 }
+
+CONTROL_COMMANDS = (
+    "doctor",
+    "status",
+    "mount",
+    "mount-tree",
+    "umount",
+    "publish",
+    "commit",
+    "compact",
+    "pin",
+    "write-policy",
+    "ls",
+    "parent-ls",
+    "create",
+    "rmdir",
+    "access",
+    "observe-ls",
+    "observe-mkdir",
+    "observe-access",
+    "rename",
+    "env-txn",
+    "env-status",
+    "init-conda-envs",
+    "import",
+    "hpc-export",
+)
 
 
 def _socket_path() -> str:
@@ -94,7 +121,7 @@ def _print_result(result: dict[str, Any], *, as_json: bool) -> None:
         print(f"{key}: {value}")
 
 
-def _doctor(as_json: bool = False) -> int:
+def _doctor(as_json: bool = False, *, prog: str = "ccc-storage") -> int:
     sock_path = _socket_path()
     if _socket_reachable(sock_path):
         code, result = _request("doctor")
@@ -115,7 +142,7 @@ def _doctor(as_json: bool = False) -> int:
     if as_json:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:
-        print("ccc-layered doctor:")
+        print(f"{prog} doctor:")
         print(f"  mountd socket     : DOWN ({sock_path}) — mountd not reachable on this node")
         if nfs_root:
             state = "reachable" if result["nfs_root_reachable"] else "MISSING"
@@ -139,6 +166,9 @@ def _socket_command(ns: argparse.Namespace) -> int:
         if getattr(ns, "policy", None):
             payload["policy"] = ns.policy
         payload["remount"] = bool(getattr(ns, "remount", False))
+    if ns.cmd == "compact":
+        payload["dry_run"] = bool(getattr(ns, "dry_run", False))
+        payload["allow_base"] = bool(getattr(ns, "allow_base", False))
     code, result = _request(ns.cmd, path=getattr(ns, "path", ""), payload=payload)
     if code != 0:
         if getattr(ns, "json", False):
@@ -157,12 +187,12 @@ def _init_conda_envs_command(ns: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, prog: str = "ccc-storage") -> int:
     parser = argparse.ArgumentParser(
-        prog="ccc-layered",
+        prog=prog,
         description="Unprivileged layered-storage control CLI.",
     )
-    parser.add_argument("--version", action="version", version=f"ccc-layered {__version__}")
+    parser.add_argument("--version", action="version", version=f"{prog} {__version__}")
     sub = parser.add_subparsers(dest="cmd")
 
     doctor = sub.add_parser("doctor", help="probe socket, NFS root, and local capabilities")
@@ -184,6 +214,17 @@ def main(argv: list[str] | None = None) -> int:
     commit.add_argument("-m", "--message", default="")
     commit.add_argument("--json", action="store_true")
     commit.set_defaults(func=_socket_command)
+
+    compact = sub.add_parser("compact", help="run or preview log-structured pack compaction")
+    compact.add_argument("path")
+    compact.add_argument("--dry-run", action="store_true")
+    compact.add_argument(
+        "--allow-base",
+        action="store_true",
+        help="allow heavy/base compaction for this explicit operation",
+    )
+    compact.add_argument("--json", action="store_true")
+    compact.set_defaults(func=_socket_command)
 
     pin = sub.add_parser("pin", help="pin/unpin a child to exempt it from cold-tier GC")
     pin.add_argument("path")
@@ -264,11 +305,11 @@ def main(argv: list[str] | None = None) -> int:
     ns, _rest = parser.parse_known_args(argv)
 
     if ns.cmd == "doctor":
-        return _doctor(as_json=ns.json)
+        return _doctor(as_json=ns.json, prog=prog)
     if hasattr(ns, "func"):
         return ns.func(ns)
     if ns.cmd in _NOT_IMPLEMENTED:
-        print(f"ccc-layered {ns.cmd}: not yet implemented ({_NOT_IMPLEMENTED[ns.cmd]}).")
+        print(f"{prog} {ns.cmd}: not yet implemented ({_NOT_IMPLEMENTED[ns.cmd]}).")
         return 0
 
     parser.print_help()

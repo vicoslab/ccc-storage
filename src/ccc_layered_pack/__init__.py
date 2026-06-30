@@ -1,4 +1,4 @@
-"""ccc_layered_pack — SquashFS pack build/verify/read library and `ccc-pack` CLI.
+"""ccc_layered_pack — SquashFS pack build/verify/read library and `ccc-storage pack` CLI.
 
 Data-plane only: turns directory trees into immutable SquashFS packs and reads
 them back (squashfuse unprivileged by default, kernel squashfs when privileged).

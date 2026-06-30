@@ -240,12 +240,12 @@ os.environ['CCC_MOUNTD_SOCK'] = str(sock)
 os.environ['CCC_NFS_ROOT'] = str(nfs)
 try:
     # Exercise the real socket/CLI path rather than directly calling the service:
-    # ccc-layered mount-tree <parent-id> --json
+    # ccc-storage mount-tree <parent-id> --json
     env = dict(os.environ)
     env['CCC_MOUNTD_SOCK'] = str(sock)
     env['CCC_NFS_ROOT'] = str(nfs)
     cp = subprocess.run(
-        ['ccc-layered', 'mount-tree', parent_id, '--json'],
+        ['ccc-storage', 'mount-tree', parent_id, '--json'],
         capture_output=True,
         text=True,
         check=False,
@@ -253,7 +253,7 @@ try:
     )
     if cp.returncode != 0:
         raise SystemExit(
-            f'ccc-layered mount-tree failed with code {cp.returncode}: {cp.stderr}{cp.stdout}'
+            f'ccc-storage mount-tree failed with code {cp.returncode}: {cp.stderr}{cp.stdout}'
         )
     (root / 'mount-tree.json').write_text(cp.stdout)
     mounted = json.loads(cp.stdout)

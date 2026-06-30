@@ -57,12 +57,12 @@ class StagedPackset:
         return IncludedPath(child_id=best.child_id, path=clean, inner_path=inner)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, prog: str = "ccc-storage hpc") -> int:
     parser = argparse.ArgumentParser(
-        prog="ccc-layered-hpc",
+        prog=prog,
         description="External-HPC packset client foundation.",
     )
-    parser.add_argument("--version", action="version", version=f"ccc-layered-hpc {__version__}")
+    parser.add_argument("--version", action="version", version=f"{prog} {__version__}")
     sub = parser.add_subparsers(dest="cmd")
     status = sub.add_parser("status", help="show staged packset status")
     status.add_argument("name")
@@ -81,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if ns.cmd in {"mount", "push"}:
         print(
-            f"ccc-layered-hpc {ns.cmd}: runtime adapter not yet implemented; "
+            f"{prog} {ns.cmd}: runtime adapter not yet implemented; "
             "use library APIs in tests"
         )
         return 0

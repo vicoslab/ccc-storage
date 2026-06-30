@@ -59,6 +59,13 @@ class PackInfo:
     file_count: int | None = None
     block: str = "1M"
     comp: str = "zstd"
+    # Log-structured pack-level metadata. Old manifests carry none of these, so
+    # the defaults below describe a plain base pack at level 0 with no generation
+    # range; ``to_dict`` only emits them when set so old readers stay compatible.
+    level: int = 0
+    generation_min: int = 0
+    generation_max: int = 0
+    kind: str = "base"
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
@@ -70,6 +77,14 @@ class PackInfo:
         }
         if self.file_count is not None:
             data["file_count"] = self.file_count
+        if self.level:
+            data["level"] = self.level
+        if self.generation_min:
+            data["generation_min"] = self.generation_min
+        if self.generation_max:
+            data["generation_max"] = self.generation_max
+        if self.kind and self.kind != "base":
+            data["kind"] = self.kind
         return data
 
     @classmethod
@@ -81,6 +96,10 @@ class PackInfo:
             file_count=None if data.get("file_count") is None else int(data["file_count"]),
             block=str(data.get("block", "1M")),
             comp=str(data.get("comp", "zstd")),
+            level=int(data.get("level", 0)),
+            generation_min=int(data.get("generation_min", 0)),
+            generation_max=int(data.get("generation_max", 0)),
+            kind=str(data.get("kind", "base")),
         )
 
 

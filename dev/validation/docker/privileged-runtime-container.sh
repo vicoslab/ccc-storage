@@ -51,7 +51,7 @@ cleanup() {
   set +e
   cleanup_mounts
   if [ -n "$mountd_pid" ] && kill -0 "$mountd_pid" 2>/dev/null; then
-    CCC_MOUNTD_SOCK="$socket_path" ccc-layered umount "$child_id" --json >/dev/null 2>&1 || true
+    CCC_MOUNTD_SOCK="$socket_path" ccc-storage umount "$child_id" --json >/dev/null 2>&1 || true
     kill "$mountd_pid" >/dev/null 2>&1 || true
     wait "$mountd_pid" >/dev/null 2>&1 || true
   fi
@@ -88,7 +88,7 @@ fi
 printf 'hello from privileged no-sidecar runtime smoke\n' >"$seed_dir/hello.txt"
 printf 'nested seed payload\n' >"$seed_dir/nested/payload.txt"
 
-ccc-pack build \
+ccc-storage pack build \
   "$seed_dir" \
   "$base_pack" \
   --manifest "$manifest_path" \
@@ -103,7 +103,7 @@ export CCC_NFS_ROOT="$nfs_root"
 export CCC_NODE_RUN_DIR="$run_dir"
 export CCC_MOUNTD_SOCK="$socket_path"
 
-ccc-layered-mountd \
+ccc-storage mountd \
   --nfs-root "$nfs_root" \
   --run-dir "$run_dir" \
   --socket "$socket_path" >"$mountd_log" 2>&1 &
@@ -114,7 +114,7 @@ for _ in $(seq 1 100); do
     break
   fi
   if ! kill -0 "$mountd_pid" 2>/dev/null; then
-    echo "ccc-layered-mountd exited before creating socket" >&2
+    echo "ccc-storage mountd exited before creating socket" >&2
     sed -n '1,200p' "$mountd_log" >&2 || true
     wait "$mountd_pid"
     exit 1
@@ -128,9 +128,9 @@ if [ ! -S "$socket_path" ]; then
   exit 1
 fi
 
-ccc-layered doctor --json >"$runtime_root/doctor.json"
-ccc-layered mount "$child_id" --json >"$mount_json"
-ccc-layered status "$child_id" --json >"$status_json"
+ccc-storage doctor --json >"$runtime_root/doctor.json"
+ccc-storage mount "$child_id" --json >"$mount_json"
+ccc-storage status "$child_id" --json >"$status_json"
 
 lowerdir="$(python - "$status_json" <<'PY'
 import json
@@ -176,7 +176,7 @@ while [ ! -e "$control_dir/stop" ]; do
     mv "$control_dir/seal" "$control_dir/sealed"
   fi
   if ! kill -0 "$mountd_pid" 2>/dev/null; then
-    echo "ccc-layered-mountd exited unexpectedly" >&2
+    echo "ccc-storage mountd exited unexpectedly" >&2
     sed -n '1,200p' "$mountd_log" >&2 || true
     exit 1
   fi
