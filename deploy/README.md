@@ -27,7 +27,7 @@ docker build -f deploy/docker/mountd.Dockerfile -t ccc-layered-mountd:local .
 
 `mountd.Dockerfile` installs the package with its manifest/FUSE runtime extras,
 uses `deploy/docker/mountd-entrypoint.sh`, and exposes a mountd health check. It
-is separate from the repository-root `Dockerfile`, which is a development/test
+is separate from `dev/docker/test.Dockerfile`, which is a development/test
 image.
 
 ## Systemd unit

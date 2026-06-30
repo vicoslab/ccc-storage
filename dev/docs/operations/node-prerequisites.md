@@ -83,7 +83,7 @@ scratch container storage, run:
 dev/validation/local/docker-smoke.sh
 ```
 
-It builds the repository `Dockerfile` with a local tag, then runs unit tests,
+It builds `dev/docker/test.Dockerfile` with a local tag, then runs unit tests,
 `dev/validation/local/runtime-smoke.sh`, and `dev/validation/local/fuse-smoke.sh` inside one smoke
 container. `/dev/fuse`, `CAP_SYS_ADMIN`, and the AppArmor mount relaxation are
 passed only to that container.

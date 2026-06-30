@@ -18,7 +18,7 @@ RUN apt-get update \
         squashfuse \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md Dockerfile ./
+COPY pyproject.toml README.md ./
 COPY .github ./.github
 COPY src ./src
 COPY tests ./tests

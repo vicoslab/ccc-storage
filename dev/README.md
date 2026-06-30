@@ -9,6 +9,8 @@ normal server deployment.
 
 ```text
 dev/
+  docker/
+    test.Dockerfile             # optional development/test image
   bench/                       # standalone benchmark workload generators
   validation/
     local/                     # local package/FUSE/Docker smoke checks
@@ -20,6 +22,15 @@ dev/
     performance/               # benchmark descriptions and checked-in summaries
     benchmarks/                # raw JSON benchmark artifacts from development runs
 ```
+
+## Development/test image
+
+```bash
+docker build -f dev/docker/test.Dockerfile -t ccc-layered-storage:test .
+```
+
+This image installs development/test extras and defaults to `make test`; it is
+not the mountd deployment image.
 
 ## Common validation entrypoints
 

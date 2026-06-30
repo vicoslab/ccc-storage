@@ -15,7 +15,7 @@ if [ ! -c /dev/fuse ]; then
   exit 3
 fi
 
-"$docker_bin" build -t "$tag" "$repo_root"
+"$docker_bin" build -f "$repo_root/dev/docker/test.Dockerfile" -t "$tag" "$repo_root"
 
 "$docker_bin" run --rm \
   --device /dev/fuse \

@@ -30,7 +30,7 @@ many small files on NFS
 Development/test image:
 
 ```bash
-docker build -t ccc-layered-storage:test .
+docker build -f dev/docker/test.Dockerfile -t ccc-layered-storage:test .
 ```
 
 Production mountd image:

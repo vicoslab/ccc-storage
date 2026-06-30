@@ -121,7 +121,9 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
 
 
 def test_dockerfile_is_optional_test_image_only():
-    text = (ROOT / "Dockerfile").read_text()
+    assert not (ROOT / "Dockerfile").exists()
+    dockerfile = ROOT / "dev" / "docker" / "test.Dockerfile"
+    text = dockerfile.read_text()
     pyproject = (ROOT / "pyproject.toml").read_text()
     assert "ccc-layered-storage" in text
     assert "make test" in text
@@ -131,7 +133,7 @@ def test_dockerfile_is_optional_test_image_only():
     assert "COPY deploy ./deploy" in text
     assert "COPY dev ./dev" in text
     assert "COPY .github ./.github" in text
-    assert "Dockerfile ./" in text
+    assert "COPY pyproject.toml README.md ./" in text
     assert "squashfs-tools" in text
     assert "squashfuse" in text
     assert "fuse3" in text
