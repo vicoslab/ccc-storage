@@ -3,7 +3,7 @@
 
 Run inside a FUSE-capable container when measuring SquashFS/fuse-overlayfs:
 
-  python bench/image_small_files.py --ssd-root /bench/ssd --nfs-root /bench/nfs
+  python dev/bench/image_small_files.py --ssd-root /dev/bench/ssd --nfs-root /dev/bench/nfs
 
 The synthetic files are JPEG-like incompressible payloads. The benchmark reads
 all bytes and computes a checksum so reads cannot be optimized away.

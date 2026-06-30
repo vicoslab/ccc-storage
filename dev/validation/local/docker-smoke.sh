@@ -26,8 +26,8 @@ fi
   sh -lc '
     set -eu
     make test
-    CCC_SMOKE_ROOT=/tmp/ccc-layered-docker-smoke/runtime deploy/validation/local/runtime-smoke.sh
-    CCC_SMOKE_ROOT=/tmp/ccc-layered-docker-smoke/fuse deploy/validation/local/fuse-smoke.sh
+    CCC_SMOKE_ROOT=/tmp/ccc-layered-docker-smoke/runtime dev/validation/local/runtime-smoke.sh
+    CCC_SMOKE_ROOT=/tmp/ccc-layered-docker-smoke/fuse dev/validation/local/fuse-smoke.sh
   '
 
 echo "docker smoke passed"

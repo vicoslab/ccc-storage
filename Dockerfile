@@ -23,6 +23,7 @@ COPY .github ./.github
 COPY src ./src
 COPY tests ./tests
 COPY deploy ./deploy
+COPY dev ./dev
 COPY Makefile ./
 
 RUN python -m pip install --upgrade pip \

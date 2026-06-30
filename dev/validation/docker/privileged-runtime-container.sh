@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Container-side worker for deploy/validation/docker/privileged-runtime-smoke.sh.
+# Container-side worker for dev/validation/docker/privileged-runtime-smoke.sh.
 # This script is intentionally no sidecar: all mount authority stays inside the
 # privileged Docker container.
 

@@ -33,14 +33,14 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
     service = ROOT / "deploy" / "systemd" / "ccc-layered-mountd.service"
     install = ROOT / "deploy" / "systemd" / "install.sh"
     uninstall = ROOT / "deploy" / "systemd" / "uninstall.sh"
-    prereqs = ROOT / "docs" / "operations" / "node-prerequisites.md"
-    smoke = ROOT / "deploy" / "validation" / "local" / "runtime-smoke.sh"
-    fuse_smoke = ROOT / "deploy" / "validation" / "local" / "fuse-smoke.sh"
-    docker_smoke = ROOT / "deploy" / "validation" / "local" / "docker-smoke.sh"
-    s3_smoke = ROOT / "deploy" / "validation" / "s3" / "s3-smoke.sh"
-    s3_cold_hpc_smoke = ROOT / "deploy" / "validation" / "s3" / "s3-cold-hpc-smoke.sh"
-    nested_smoke = ROOT / "deploy" / "validation" / "docker" / "nested-runtime-smoke.sh"
-    observation_smoke = ROOT / "deploy" / "validation" / "docker" / "observation-runtime-smoke.sh"
+    prereqs = ROOT / "dev" / "docs" / "operations" / "node-prerequisites.md"
+    smoke = ROOT / "dev" / "validation" / "local" / "runtime-smoke.sh"
+    fuse_smoke = ROOT / "dev" / "validation" / "local" / "fuse-smoke.sh"
+    docker_smoke = ROOT / "dev" / "validation" / "local" / "docker-smoke.sh"
+    s3_smoke = ROOT / "dev" / "validation" / "s3" / "s3-smoke.sh"
+    s3_cold_hpc_smoke = ROOT / "dev" / "validation" / "s3" / "s3-cold-hpc-smoke.sh"
+    nested_smoke = ROOT / "dev" / "validation" / "docker" / "nested-runtime-smoke.sh"
+    observation_smoke = ROOT / "dev" / "validation" / "docker" / "observation-runtime-smoke.sh"
 
     for path in (
         deploy_readme,
@@ -58,10 +58,13 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
     ):
         assert path.exists(), path
 
+    dev_readme = ROOT / "dev" / "README.md"
     deploy_text = deploy_readme.read_text()
+    dev_text = dev_readme.read_text()
     assert "deploy/docker/mountd.Dockerfile" in deploy_text
-    assert "repository root is the optional development/test image" in deploy_text
-    assert "deploy/validation/performance/performance-runtime-benchmark.sh" in deploy_text
+    assert "Development-only validation" in deploy_text
+    assert "dev/validation/performance/performance-runtime-benchmark.sh" not in deploy_text
+    assert "dev/validation/performance/performance-runtime-benchmark.sh" in dev_text
 
     service_text = service.read_text()
     assert "ExecStart=" in service_text
@@ -113,8 +116,8 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
     assert "--device /dev/fuse" in docker_text
     assert "--cap-add SYS_ADMIN" in docker_text
     assert "--security-opt apparmor=unconfined" in docker_text
-    assert "deploy/validation/local/runtime-smoke.sh" in docker_text
-    assert "deploy/validation/local/fuse-smoke.sh" in docker_text
+    assert "dev/validation/local/runtime-smoke.sh" in docker_text
+    assert "dev/validation/local/fuse-smoke.sh" in docker_text
 
 
 def test_dockerfile_is_optional_test_image_only():
@@ -126,6 +129,7 @@ def test_dockerfile_is_optional_test_image_only():
     assert "pyfuse3" in pyproject
     assert "trio" in pyproject
     assert "COPY deploy ./deploy" in text
+    assert "COPY dev ./dev" in text
     assert "COPY .github ./.github" in text
     assert "Dockerfile ./" in text
     assert "squashfs-tools" in text

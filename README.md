@@ -46,16 +46,17 @@ make lint
 make test
 ```
 
-Runtime smoke for the production topology:
+Development runtime smoke for the mountd/app-container topology:
 
 ```bash
 CCC_MOUNTD_IMAGE=ccc-layered-mountd:local \
-deploy/validation/docker/mountd-container-runtime-smoke.sh
+dev/validation/docker/mountd-container-runtime-smoke.sh
 ```
 
 This starts a privileged mountd container and a separate unprivileged app
 container, writes through the app-visible folder, commits, remounts, and verifies
-that the app never receives mountd env/socket/FUSE privileges.
+that the app never receives mountd env/socket/FUSE privileges. Development-only
+validation scripts live under `dev/`; deployment files live under `deploy/`.
 
 ## Use from CCC
 
@@ -102,9 +103,7 @@ ENABLE_STORAGE_MOUNT_PROPAGATION: true
 
 ## More details
 
+- Deployment artifacts: `deploy/README.md`
+- Development validation and benchmarks: `dev/README.md`
 - Mountd container operation: `docs/operations/mountd-container.md`
 - Conda/mamba shim: `docs/operations/conda-shim.md`
-- Conda-style metadata benchmark: `docs/performance/conda-small-files-smoke.md`
-- Image-like small-file benchmark: `docs/performance/image-small-files-5000x32k.md`
-- Full write/read validation benchmark: `docs/performance/write-read-validation.md`
-- Runtime prerequisites: `docs/operations/node-prerequisites.md`

@@ -130,8 +130,8 @@ start_app() {
   "$docker_bin" run -d --rm \
     --name "$app_name" \
     --mount type=bind,src="$docker_run_root/published",dst=/storage/layered,bind-propagation=rslave \
-    --mount type=bind,src="$docker_run_root/nfs",dst=/bench/nfs,bind-propagation=rshared \
-    --mount type=bind,src="$docker_ssd_run_root/direct",dst=/bench/local,bind-propagation=rshared \
+    --mount type=bind,src="$docker_run_root/nfs",dst=/dev/bench/nfs,bind-propagation=rshared \
+    --mount type=bind,src="$docker_ssd_run_root/direct",dst=/dev/bench/local,bind-propagation=rshared \
     "$app_image" sh -lc 'while true; do sleep 3600; done' >/dev/null
 }
 
@@ -151,7 +151,7 @@ run_target_bench() {
     "$size_flag" "$size_value" \
     --fanout 100 \
     --seed "$seed" \
-    --json-out "/bench/nfs/results/${workload}-${target}.json" \
+    --json-out "/dev/bench/nfs/results/${workload}-${target}.json" \
     --no-clean >/dev/null
 }
 
@@ -167,8 +167,8 @@ run_workload() {
   echo "benchmark workload=$workload files=$files $size_flag=$size_value"
 
   mkdir -p "$run_root/nfs/direct/$workload" "$ssd_run_root/direct/$workload"
-  run_target_bench "$workload" direct-local "/bench/local/$workload" "$files" "$size_flag" "$size_value" "$seed"
-  run_target_bench "$workload" direct-nfs "/bench/nfs/direct/$workload" "$files" "$size_flag" "$size_value" "$seed"
+  run_target_bench "$workload" direct-local "/dev/bench/local/$workload" "$files" "$size_flag" "$size_value" "$seed"
+  run_target_bench "$workload" direct-nfs "/dev/bench/nfs/direct/$workload" "$files" "$size_flag" "$size_value" "$seed"
 
   "$docker_bin" exec "$app_name" sh -lc "mkdir /storage/layered/$shared_child"
   "$docker_bin" exec "$app_name" sh -lc "ls -la /storage/layered/$shared_child >/dev/null 2>&1 || true"

@@ -27,17 +27,20 @@ App containers:
 docker build -f deploy/docker/mountd.Dockerfile -t ccc-layered-mountd:local .
 ```
 
-## Run smoke topology
+## Development smoke topology
+
+A repository checkout includes a development-only Docker/FUSE smoke for this
+mountd/app-container topology:
 
 ```bash
 CCC_MOUNTD_IMAGE=ccc-layered-mountd:local \
-CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-mountd-container-test \
-deploy/validation/docker/mountd-container-runtime-smoke.sh
+dev/validation/docker/mountd-container-runtime-smoke.sh
 ```
 
-The smoke starts two containers: privileged mountd and unprivileged app.  It
+The smoke starts two containers: privileged mountd and unprivileged app. It
 checks that the app has no mountd socket/env/FUSE access, writes through the
-published layered folder, commits, remounts, and reads the committed data.
+published layered folder, commits, remounts, and reads the committed data. See
+`dev/README.md` for validation details.
 
 ## Important mountd flags
 

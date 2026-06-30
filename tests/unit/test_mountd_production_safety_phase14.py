@@ -90,7 +90,7 @@ def test_mountd_docker_artifacts_are_dedicated_service_container():
     root = Path(__file__).resolve().parents[2]
     dockerfile = root / "deploy" / "docker" / "mountd.Dockerfile"
     entrypoint = root / "deploy" / "docker" / "mountd-entrypoint.sh"
-    smoke = root / "deploy" / "validation" / "docker" / "mountd-container-runtime-smoke.sh"
+    smoke = root / "dev" / "validation" / "docker" / "mountd-container-runtime-smoke.sh"
 
     assert dockerfile.exists()
     assert entrypoint.exists()

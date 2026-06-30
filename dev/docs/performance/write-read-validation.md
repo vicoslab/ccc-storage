@@ -1,6 +1,6 @@
 # CCC layered write/read performance validation
 
-`deploy/validation/performance/performance-runtime-benchmark.sh` is the full write/read performance
+`dev/validation/performance/performance-runtime-benchmark.sh` is the full write/read performance
 validation for the layered-storage stack.  It complements the smaller functional
 runtime smokes by comparing the actual storage paths users care about:
 
@@ -44,7 +44,7 @@ CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-l
 CCC_LOCAL_SSD_ROOT=/tmp/ccc-layered-storage-performance-local \
 CCC_LOCAL_SSD_DOCKER_SOURCE_ROOT=/tmp/ccc-layered-storage-performance-local \
 CCC_PERF_TIMEOUT=600 \
-deploy/validation/performance/performance-runtime-benchmark.sh
+dev/validation/performance/performance-runtime-benchmark.sh
 ```
 
 The script builds `ccc-layered-mountd:local` unless
@@ -70,7 +70,7 @@ by node.  Set `CCC_PERF_MIN_DIRECT_LOCAL_SPEEDUP` for site-specific acceptance.
 Final validation run:
 
 - Run id: `donbot-20260630T141650Z-42250`
-- Artifact: `docs/benchmarks/performance-summary-donbot-20260630T141650Z.json`
+- Artifact: `dev/docs/benchmarks/performance-summary-donbot-20260630T141650Z.json`
 - Runtime root: `/storage/user/ccc-layered-storage-performance-test/runs/donbot-20260630T141650Z-42250`
 - Validation: passed
 
@@ -107,5 +107,5 @@ A successful run writes:
 <runtime-root>/runs/<run-id>/nfs/results/<workload>-<target>.json
 ```
 
-Copy the final `performance-summary.json` into `docs/benchmarks/` for release or
+Copy the final `performance-summary.json` into `dev/docs/benchmarks/` for release or
 review records.

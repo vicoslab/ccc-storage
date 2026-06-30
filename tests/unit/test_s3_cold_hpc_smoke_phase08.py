@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-COLD_HPC_SMOKE = ROOT / "deploy" / "validation" / "s3" / "s3-cold-hpc-smoke.sh"
+COLD_HPC_SMOKE = ROOT / "dev" / "validation" / "s3" / "s3-cold-hpc-smoke.sh"
 
 
 def test_s3_cold_hpc_smoke_script_exists_and_is_executable():

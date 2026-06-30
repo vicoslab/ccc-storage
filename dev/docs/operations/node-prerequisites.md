@@ -53,7 +53,7 @@ For a scratch-only control-plane smoke test that does not touch production
 `/storage/.ccc-layered`, run from the repository checkout:
 
 ```bash
-deploy/validation/local/runtime-smoke.sh
+dev/validation/local/runtime-smoke.sh
 ```
 
 The script creates a temporary root under `/tmp` by default, starts a local
@@ -64,7 +64,7 @@ For real SquashFS build/verify/extract plus an unprivileged FUSE mount check,
 run:
 
 ```bash
-deploy/validation/local/fuse-smoke.sh
+dev/validation/local/fuse-smoke.sh
 ```
 
 This uses a git-ignored repo-local `.scratch/` root by default so CCC's
@@ -80,11 +80,11 @@ For a local Docker validation image that does not push anything and uses only
 scratch container storage, run:
 
 ```bash
-deploy/validation/local/docker-smoke.sh
+dev/validation/local/docker-smoke.sh
 ```
 
 It builds the repository `Dockerfile` with a local tag, then runs unit tests,
-`deploy/validation/local/runtime-smoke.sh`, and `deploy/validation/local/fuse-smoke.sh` inside one smoke
+`dev/validation/local/runtime-smoke.sh`, and `dev/validation/local/fuse-smoke.sh` inside one smoke
 container. `/dev/fuse`, `CAP_SYS_ADMIN`, and the AppArmor mount relaxation are
 passed only to that container.
 
@@ -98,7 +98,7 @@ PYTHON=/path/to/ccc-dev/bin/python \
 CCC_S3_CREDENTIALS_SH=/path/to/s3_storage_premissions.sh \
 CCC_S3_ENDPOINT=https://ceph-7.fri.uni-lj.si \
 CCC_S3_ADDRESSING_STYLE=auto \
-deploy/validation/s3/s3-smoke.sh
+dev/validation/s3/s3-smoke.sh
 ```
 
 The script sources the credential file without printing it, creates or validates
@@ -114,7 +114,7 @@ PYTHON=/path/to/ccc-dev/bin/python \
 CCC_S3_CREDENTIALS_SH=/path/to/s3_storage_premissions.sh \
 CCC_S3_ENDPOINT=https://ceph-7.fri.uni-lj.si \
 CCC_S3_ADDRESSING_STYLE=auto \
-deploy/validation/s3/s3-cold-hpc-smoke.sh
+dev/validation/s3/s3-cold-hpc-smoke.sh
 ```
 
 This smoke creates a real dirty overlay for a dataset child, commits it through
@@ -138,7 +138,7 @@ For an actual Docker runtime check where mount authority is fully inside one
 privileged Docker container, run:
 
 ```bash
-CCC_CLIENT_CONTAINERS=domen-cuda10 deploy/validation/docker/privileged-runtime-smoke.sh
+CCC_CLIENT_CONTAINERS=domen-cuda10 dev/validation/docker/privileged-runtime-smoke.sh
 ```
 
 From a CCC container with the host Docker socket mounted, Docker bind sources are
@@ -149,7 +149,7 @@ storage through `/storage/user`. In that case pass both roots:
 CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-runtime-test \
 CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-layered-storage-runtime-test \
 CCC_CLIENT_CONTAINERS=domen-cuda10 \
-deploy/validation/docker/privileged-runtime-smoke.sh
+dev/validation/docker/privileged-runtime-smoke.sh
 ```
 
 This smoke is intentionally privileged and intentionally no-sidecar. It does not
@@ -166,7 +166,7 @@ For nested/hierarchical pack validation, run:
 ```bash
 CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-nested-test \
 CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-layered-storage-nested-test \
-deploy/validation/docker/nested-runtime-smoke.sh
+dev/validation/docker/nested-runtime-smoke.sh
 ```
 
 This smoke builds a parent/root SquashFS with `exclude_boundaries=[...]`, verifies
@@ -182,7 +182,7 @@ run:
 ```bash
 CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-observation-test \
 CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-layered-storage-observation-test \
-deploy/validation/docker/observation-runtime-smoke.sh
+dev/validation/docker/observation-runtime-smoke.sh
 ```
 
 This smoke places visible `CCC_LAYERED_OBSERVE` marker files at a root and a
@@ -213,7 +213,7 @@ example:
 
 ```bash
 for node in donbot morbo calculon crushinator flexo kif zapp; do
-  ssh "$node" 'cd /path/to/ccc-layered-storage && CCC_CLIENT_CONTAINERS=domen-cuda10 deploy/validation/docker/privileged-runtime-smoke.sh'
+  ssh "$node" 'cd /path/to/ccc-layered-storage && CCC_CLIENT_CONTAINERS=domen-cuda10 dev/validation/docker/privileged-runtime-smoke.sh'
 done
 ```
 

@@ -8,12 +8,12 @@ Real Docker/FUSE benchmark run on `donbot` inside the `ccc-layered-mountd:phase1
 - Size per file: 32 KiB
 - Total payload: 156.25 MiB
 - Payloads: JPEG-like pseudo-random bytes, intentionally mostly incompressible.
-- Result root: `/storage/user/ccc-layered-storage-image-bench/runs/donbot-20260630T100156Z-14437`
+- Result root: `/storage/user/ccc-layered-storage-image-dev/bench/runs/donbot-20260630T100156Z-14437`
 
 ## Mounts
 
-- `/bench/nfs`: `/bench/nfs 10.10.20.31:/nfs/LUVSS_home/vicos/<ccc-user-id>/ccc-layered-storage-image-bench/runs/donbot-20260630T100156Z-14437/nfs nfs4 rw,relatime,vers=4.0,rsize=1048576,wsize=1048576,namlen=255,hard,proto=tcp,timeo=600,retrans=2,sec=sys,clientaddr=10.10.20.75,fsc,local_lock=none,addr=10.10.20.31`
-- `/bench/ssd`: `/bench/ssd /dev/md0[/opt/storage/ssd/<ccc-user-id>/ccc-layered-storage-image-bench/runs/donbot-20260630T100156Z-14437/ssd] ext4 rw,relatime,stripe=256`
+- `/dev/bench/nfs`: `/dev/bench/nfs 10.10.20.31:/nfs/LUVSS_home/vicos/<ccc-user-id>/ccc-layered-storage-image-dev/bench/runs/donbot-20260630T100156Z-14437/nfs nfs4 rw,relatime,vers=4.0,rsize=1048576,wsize=1048576,namlen=255,hard,proto=tcp,timeo=600,retrans=2,sec=sys,clientaddr=10.10.20.75,fsc,local_lock=none,addr=10.10.20.31`
+- `/dev/bench/ssd`: `/dev/bench/ssd /dev/md0[/opt/storage/ssd/<ccc-user-id>/ccc-layered-storage-image-dev/bench/runs/donbot-20260630T100156Z-14437/ssd] ext4 rw,relatime,stripe=256`
 
 ## Results
 

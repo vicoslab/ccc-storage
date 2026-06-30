@@ -4,10 +4,10 @@ Command run locally from this repo:
 
 ```bash
 PATH=/path/to/ccc-dev/bin:$PATH \
-python bench/conda_small_files.py \
+python dev/bench/conda_small_files.py \
   --files 3000 \
   --payload-bytes 256 \
-  --json-out docs/performance/conda-small-files-smoke.json
+  --json-out dev/docs/performance/conda-small-files-smoke.json
 ```
 
 Result on the current CCC workspace node:

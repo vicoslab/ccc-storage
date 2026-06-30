@@ -111,28 +111,16 @@ After a successful `local-ssd-async` commit, mountd removes the NFS async mirror
 and node-local dirty upper/work state so the next mount starts from the committed
 pack stack rather than re-publishing stale local files.
 
-## Performance gates
+## Performance validation
 
-A production runtime smoke must validate both policies:
+Development validation should exercise both policies:
 
 - `shared-nfs` remains functional and no worse than previous smoke baselines;
-- `local-ssd-async` write throughput is at least `4000 files/s` for the
-  `2k × 32KiB` image-like workload or at least `5x` faster than shared-NFS dirty
-  writes in the same run;
+- `local-ssd-async` write throughput is substantially faster than shared-NFS
+  dirty writes for small-file write bursts;
 - SquashFS/read path remains acceptable;
 - a published NFS mirror becomes visible to a second mount within a bounded
   interval and contains complete files only.
 
-Validated runtime result on `donbot` (`deploy/validation/docker/write-policy-runtime-smoke.sh`,
-Docker/FUSE, `2,000 × 32 KiB` files, run
-`donbot-20260630T135531Z-41409`; artifact:
-`docs/benchmarks/write-policy-smoke-donbot-20260630T135531Z.json`):
-
-| Policy | FS type | Write files/s | Read files/s | Write time |
-|---|---|---:|---:|---:|
-| `shared-nfs` | `fuse.fuse-overlayfs` | `393.58` | `1666.54` | `5.082s` |
-| `local-ssd-async` | kernel `overlay` | `6332.91` | `9508.59` | `0.316s` |
-
-Measured local write speedup: `16.09×`.  The same smoke also verified explicit
-policy switching, NFS dirty mirror publication, second-mount read visibility,
-local commit to SquashFS delta generation `1`, and post-commit remount/read.
+Project-local validation scripts and recorded benchmark artifacts live under
+`dev/`.

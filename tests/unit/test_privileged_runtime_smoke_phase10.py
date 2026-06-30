@@ -4,9 +4,9 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-HOST_SCRIPT = ROOT / "deploy" / "validation" / "docker" / "privileged-runtime-smoke.sh"
-CONTAINER_SCRIPT = ROOT / "deploy" / "validation" / "docker" / "privileged-runtime-container.sh"
-PREREQS_DOC = ROOT / "docs" / "operations" / "node-prerequisites.md"
+HOST_SCRIPT = ROOT / "dev" / "validation" / "docker" / "privileged-runtime-smoke.sh"
+CONTAINER_SCRIPT = ROOT / "dev" / "validation" / "docker" / "privileged-runtime-container.sh"
+PREREQS_DOC = ROOT / "dev" / "docs" / "operations" / "node-prerequisites.md"
 
 
 def _text() -> str:
