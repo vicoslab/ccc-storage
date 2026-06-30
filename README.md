@@ -104,5 +104,6 @@ ENABLE_STORAGE_MOUNT_PROPAGATION: true
 
 - Mountd container operation: `docs/operations/mountd-container.md`
 - Conda/mamba shim: `docs/operations/conda-shim.md`
-- Performance smoke result: `docs/performance/conda-small-files-smoke.md`
+- Conda-style metadata benchmark: `docs/performance/conda-small-files-smoke.md`
+- Image-like small-file benchmark: `docs/performance/image-small-files-5000x32k.md`
 - Runtime prerequisites: `deploy/PREREQS.md`
