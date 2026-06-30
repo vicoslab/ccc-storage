@@ -106,4 +106,5 @@ ENABLE_STORAGE_MOUNT_PROPAGATION: true
 - Conda/mamba shim: `docs/operations/conda-shim.md`
 - Conda-style metadata benchmark: `docs/performance/conda-small-files-smoke.md`
 - Image-like small-file benchmark: `docs/performance/image-small-files-5000x32k.md`
+- Full write/read validation benchmark: `docs/performance/write-read-validation.md`
 - Runtime prerequisites: `deploy/PREREQS.md`

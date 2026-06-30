@@ -1,0 +1,329 @@
+{
+  "local_ssd_root": "/tmp/ccc-layered-storage-performance-local/runs/donbot-20260630T141650Z-42250",
+  "run_id": "donbot-20260630T141650Z-42250",
+  "runtime_root": "/storage/user/ccc-layered-storage-performance-test/runs/donbot-20260630T141650Z-42250",
+  "validation": {
+    "failures": [],
+    "min_direct_local_speedup_over_nfs": 0.0,
+    "min_local_async_speedup_over_shared": 1.0,
+    "passed": true
+  },
+  "workloads": [
+    {
+      "comparisons": {
+        "direct_local_vs_direct_nfs_write_mibps": 1.7435773451740424,
+        "local_async_vs_direct_nfs_write_mibps": 1.7008925608950192,
+        "local_async_vs_shared_write_mibps": 3.9492905026707597
+      },
+      "name": "image-small",
+      "targets": {
+        "direct-local": {
+          "mount": {
+            "fstype": "ext4",
+            "source": "/dev/md0[/tmp/ccc-layered-storage-performance-local/runs/donbot-20260630T141650Z-42250/direct]",
+            "target": "/bench/local"
+          },
+          "read": {
+            "bytes": 1048576000,
+            "files": 2000,
+            "files_per_second": 811.1194921040633,
+            "mib_per_second": 405.55974605203164,
+            "seconds": 2.465727946953848,
+            "sha256": "ec6c2db9717e87a0d404357b5ac2043462d37c602ca4754c81742ba0be407ed2"
+          },
+          "root": "/bench/local/image-small",
+          "target": "direct-local",
+          "workload": {
+            "fanout": 100,
+            "files": 2000,
+            "name": "image-small",
+            "prefix": "img",
+            "seed": 501,
+            "size_bytes": 524288,
+            "size_mib": 0.5,
+            "suffix": ".jpg",
+            "total_bytes": 1048576000
+          },
+          "write": {
+            "bytes": 1048576000,
+            "data_seconds": 4.399756921920925,
+            "files": 2000,
+            "files_per_second": 353.9598444806863,
+            "mib_per_second": 176.97992224034314,
+            "seconds": 5.650358455022797,
+            "sync_seconds": 1.2506015331018716
+          }
+        },
+        "direct-nfs": {
+          "mount": {
+            "fstype": "nfs4",
+            "source": "10.10.20.31:/nfs/LUVSS_home/vicos/domen.tabernik@fri.uni-lj.si/ccc-layered-storage-performance-test/runs/donbot-20260630T141650Z-42250/nfs",
+            "target": "/bench/nfs"
+          },
+          "read": {
+            "bytes": 1048576000,
+            "files": 2000,
+            "files_per_second": 587.0749539441266,
+            "mib_per_second": 293.5374769720633,
+            "seconds": 3.4067200219724327,
+            "sha256": "ec6c2db9717e87a0d404357b5ac2043462d37c602ca4754c81742ba0be407ed2"
+          },
+          "root": "/bench/nfs/direct/image-small",
+          "target": "direct-nfs",
+          "workload": {
+            "fanout": 100,
+            "files": 2000,
+            "name": "image-small",
+            "prefix": "img",
+            "seed": 501,
+            "size_bytes": 524288,
+            "size_mib": 0.5,
+            "suffix": ".jpg",
+            "total_bytes": 1048576000
+          },
+          "write": {
+            "bytes": 1048576000,
+            "data_seconds": 9.841523788170889,
+            "files": 2000,
+            "files_per_second": 203.00782495275786,
+            "mib_per_second": 101.50391247637893,
+            "seconds": 9.851836994290352,
+            "sync_seconds": 0.010313206119462848
+          }
+        },
+        "layered-local-ssd-async": {
+          "mount": {
+            "fstype": "overlay",
+            "source": "overlay",
+            "target": "/storage/layered/local-image-small"
+          },
+          "read": {
+            "bytes": 1048576000,
+            "files": 2000,
+            "files_per_second": 770.9153336539122,
+            "mib_per_second": 385.4576668269561,
+            "seconds": 2.594318614108488,
+            "sha256": "ec6c2db9717e87a0d404357b5ac2043462d37c602ca4754c81742ba0be407ed2"
+          },
+          "root": "/storage/layered/local-image-small",
+          "target": "layered-local-ssd-async",
+          "workload": {
+            "fanout": 100,
+            "files": 2000,
+            "name": "image-small",
+            "prefix": "img",
+            "seed": 501,
+            "size_bytes": 524288,
+            "size_mib": 0.5,
+            "suffix": ".jpg",
+            "total_bytes": 1048576000
+          },
+          "write": {
+            "bytes": 1048576000,
+            "data_seconds": 4.443406049860641,
+            "files": 2000,
+            "files_per_second": 345.2944992656241,
+            "mib_per_second": 172.64724963281205,
+            "seconds": 5.792157141957432,
+            "sync_seconds": 1.3487510920967907
+          }
+        },
+        "layered-shared-nfs": {
+          "mount": {
+            "fstype": "fuse.fuse-overlayfs",
+            "source": "fuse-overlayfs",
+            "target": "/storage/layered/shared-image-small"
+          },
+          "read": {
+            "bytes": 1048576000,
+            "files": 2000,
+            "files_per_second": 503.25505622634915,
+            "mib_per_second": 251.62752811317458,
+            "seconds": 3.9741279799491167,
+            "sha256": "ec6c2db9717e87a0d404357b5ac2043462d37c602ca4754c81742ba0be407ed2"
+          },
+          "root": "/storage/layered/shared-image-small",
+          "target": "layered-shared-nfs",
+          "workload": {
+            "fanout": 100,
+            "files": 2000,
+            "name": "image-small",
+            "prefix": "img",
+            "seed": 501,
+            "size_bytes": 524288,
+            "size_mib": 0.5,
+            "suffix": ".jpg",
+            "total_bytes": 1048576000
+          },
+          "write": {
+            "bytes": 1048576000,
+            "data_seconds": 22.86864831787534,
+            "files": 2000,
+            "files_per_second": 87.43203343286956,
+            "mib_per_second": 43.71601671643478,
+            "seconds": 22.8749111907091,
+            "sync_seconds": 0.006262872833758593
+          }
+        }
+      }
+    },
+    {
+      "comparisons": {
+        "direct_local_vs_direct_nfs_write_mibps": 1.6620200296395602,
+        "local_async_vs_direct_nfs_write_mibps": 1.3093859779119954,
+        "local_async_vs_shared_write_mibps": 1.4166413846896306
+      },
+      "name": "large-files",
+      "targets": {
+        "direct-local": {
+          "mount": {
+            "fstype": "ext4",
+            "source": "/dev/md0[/tmp/ccc-layered-storage-performance-local/runs/donbot-20260630T141650Z-42250/direct]",
+            "target": "/bench/local"
+          },
+          "read": {
+            "bytes": 536870912,
+            "files": 4,
+            "files_per_second": 3.0058743686704195,
+            "mib_per_second": 384.7519191898137,
+            "seconds": 1.33072760514915,
+            "sha256": "d5ace1c467fbf8a12e5cf8ecf86dc52fba9bb3e8d39758941aa80df021eb6f7f"
+          },
+          "root": "/bench/local/large-files",
+          "target": "direct-local",
+          "workload": {
+            "fanout": 100,
+            "files": 4,
+            "name": "large-files",
+            "prefix": "img",
+            "seed": 902,
+            "size_bytes": 134217728,
+            "size_mib": 128.0,
+            "suffix": ".jpg",
+            "total_bytes": 536870912
+          },
+          "write": {
+            "bytes": 536870912,
+            "data_seconds": 2.615585482912138,
+            "files": 4,
+            "files_per_second": 1.1605740431483684,
+            "mib_per_second": 148.55347752299116,
+            "seconds": 3.4465702758170664,
+            "sync_seconds": 0.8309847929049283
+          }
+        },
+        "direct-nfs": {
+          "mount": {
+            "fstype": "nfs4",
+            "source": "10.10.20.31:/nfs/LUVSS_home/vicos/domen.tabernik@fri.uni-lj.si/ccc-layered-storage-performance-test/runs/donbot-20260630T141650Z-42250/nfs",
+            "target": "/bench/nfs"
+          },
+          "read": {
+            "bytes": 536870912,
+            "files": 4,
+            "files_per_second": 2.5614802010660496,
+            "mib_per_second": 327.86946573645434,
+            "seconds": 1.56159707903862,
+            "sha256": "d5ace1c467fbf8a12e5cf8ecf86dc52fba9bb3e8d39758941aa80df021eb6f7f"
+          },
+          "root": "/bench/nfs/direct/large-files",
+          "target": "direct-nfs",
+          "workload": {
+            "fanout": 100,
+            "files": 4,
+            "name": "large-files",
+            "prefix": "img",
+            "seed": 902,
+            "size_bytes": 134217728,
+            "size_mib": 128.0,
+            "suffix": ".jpg",
+            "total_bytes": 536870912
+          },
+          "write": {
+            "bytes": 536870912,
+            "data_seconds": 5.723113629035652,
+            "files": 4,
+            "files_per_second": 0.6982912494743282,
+            "mib_per_second": 89.38127993271401,
+            "seconds": 5.7282688319683075,
+            "sync_seconds": 0.005155202932655811
+          }
+        },
+        "layered-local-ssd-async": {
+          "mount": {
+            "fstype": "overlay",
+            "source": "overlay",
+            "target": "/storage/layered/local-large-files"
+          },
+          "read": {
+            "bytes": 536870912,
+            "files": 4,
+            "files_per_second": 2.9526363427198272,
+            "mib_per_second": 377.9374518681379,
+            "seconds": 1.3547215219587088,
+            "sha256": "d5ace1c467fbf8a12e5cf8ecf86dc52fba9bb3e8d39758941aa80df021eb6f7f"
+          },
+          "root": "/storage/layered/local-large-files",
+          "target": "layered-local-ssd-async",
+          "workload": {
+            "fanout": 100,
+            "files": 4,
+            "name": "large-files",
+            "prefix": "img",
+            "seed": 902,
+            "size_bytes": 134217728,
+            "size_mib": 128.0,
+            "suffix": ".jpg",
+            "total_bytes": 536870912
+          },
+          "write": {
+            "bytes": 536870912,
+            "data_seconds": 2.642683247104287,
+            "files": 4,
+            "files_per_second": 0.9143327705603324,
+            "mib_per_second": 117.03459463172254,
+            "seconds": 4.374774839961901,
+            "sync_seconds": 1.7320915928576142
+          }
+        },
+        "layered-shared-nfs": {
+          "mount": {
+            "fstype": "fuse.fuse-overlayfs",
+            "source": "fuse-overlayfs",
+            "target": "/storage/layered/shared-large-files"
+          },
+          "read": {
+            "bytes": 536870912,
+            "files": 4,
+            "files_per_second": 2.974216232093578,
+            "mib_per_second": 380.69967770797797,
+            "seconds": 1.3448921288363636,
+            "sha256": "d5ace1c467fbf8a12e5cf8ecf86dc52fba9bb3e8d39758941aa80df021eb6f7f"
+          },
+          "root": "/storage/layered/shared-large-files",
+          "target": "layered-shared-nfs",
+          "workload": {
+            "fanout": 100,
+            "files": 4,
+            "name": "large-files",
+            "prefix": "img",
+            "seed": 902,
+            "size_bytes": 134217728,
+            "size_mib": 128.0,
+            "suffix": ".jpg",
+            "total_bytes": 536870912
+          },
+          "write": {
+            "bytes": 536870912,
+            "data_seconds": 5.868866366799921,
+            "files": 4,
+            "files_per_second": 0.645422885736641,
+            "mib_per_second": 82.61412937429004,
+            "seconds": 6.1974870869889855,
+            "sync_seconds": 0.32862072018906474
+          }
+        }
+      }
+    }
+  ]
+}

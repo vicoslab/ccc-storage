@@ -39,6 +39,7 @@ ccc-layered = "ccc_layered_cli.main:main"
 ccc-layered-hpc = "ccc_layered_hpc.client:main"
 ccc-conda = "ccc_layered_cli.conda_shim:main_conda"
 ccc-mamba = "ccc_layered_cli.conda_shim:main_mamba"
+ccc-layered-benchmark = "ccc_layered_bench.perf:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
