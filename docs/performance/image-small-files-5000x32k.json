@@ -1,0 +1,113 @@
+{
+  "comparisons": {
+    "read_direct_nfs_vs_nfs_files_per_second": 1.0,
+    "read_direct_nfs_vs_ssd_files_per_second": 0.152,
+    "read_dirty_overlay_upper_nfs_vs_nfs_files_per_second": 0.906,
+    "read_dirty_overlay_upper_nfs_vs_ssd_files_per_second": 0.138,
+    "read_overlay_lower_squashfs_vs_nfs_files_per_second": 1.181,
+    "read_overlay_lower_squashfs_vs_ssd_files_per_second": 0.179,
+    "read_squashfs_pack_on_nfs_vs_nfs_files_per_second": 1.541,
+    "read_squashfs_pack_on_nfs_vs_ssd_files_per_second": 0.234
+  },
+  "errors": [],
+  "host": {
+    "mounts": {
+      "/bench/nfs": "/bench/nfs 10.10.20.31:/nfs/LUVSS_home/vicos/domen.tabernik@fri.uni-lj.si/ccc-layered-storage-image-bench/runs/donbot-20260630T100156Z-14437/nfs nfs4 rw,relatime,vers=4.0,rsize=1048576,wsize=1048576,namlen=255,hard,proto=tcp,timeo=600,retrans=2,sec=sys,clientaddr=10.10.20.75,fsc,local_lock=none,addr=10.10.20.31",
+      "/bench/ssd": "/bench/ssd /dev/md0[/opt/storage/ssd/domen.tabernik@fri.uni-lj.si/ccc-layered-storage-image-bench/runs/donbot-20260630T100156Z-14437/ssd] ext4 rw,relatime,stripe=256"
+    },
+    "uname": "Linux 6.8.0-124-generic"
+  },
+  "metrics": [
+    {
+      "bytes": 163840000,
+      "files": 5000,
+      "files_per_second": 9842.72,
+      "mib_per_second": 307.58,
+      "name": "write_direct_ssd",
+      "seconds": 0.50799,
+      "sync_seconds": 0.177361
+    },
+    {
+      "bytes": 163840000,
+      "files": 5000,
+      "files_per_second": 629.84,
+      "mib_per_second": 19.68,
+      "name": "write_direct_nfs",
+      "seconds": 7.938545,
+      "sync_seconds": 0.008883
+    },
+    {
+      "bytes": 163840000,
+      "files": 5000,
+      "files_per_second": 9677.06,
+      "mib_per_second": 302.41,
+      "name": "read_direct_ssd",
+      "seconds": 0.516686,
+      "sha256": "c7fcc0214f3838ff7bc79354bce22d6f39c51d97c4e20594f85a8c8b4ac2d24f"
+    },
+    {
+      "bytes": 163840000,
+      "files": 5000,
+      "files_per_second": 1469.89,
+      "mib_per_second": 45.93,
+      "name": "read_direct_nfs",
+      "seconds": 3.401626,
+      "sha256": "c7fcc0214f3838ff7bc79354bce22d6f39c51d97c4e20594f85a8c8b4ac2d24f"
+    },
+    {
+      "bytes": 163840000,
+      "files": 5000,
+      "files_per_second": 2236.47,
+      "mib_per_second": 69.89,
+      "name": "build_squashfs_from_nfs",
+      "pack_bytes": 163885056,
+      "seconds": 2.235663,
+      "stderr_tail": "",
+      "stdout_tail": "16.99% of uncompressed directory table size (113396 bytes)\nNumber of duplicate files found 0\nNumber of inodes 5101\nNumber of files 5000\nNumber of fragments 157\nNumber of symbolic links 0\nNumber of device nodes 0\nNumber of fifo nodes 0\nNumber of socket nodes 0\nNumber of directories 101\nNumber of hard-links 0\nNumber of ids (unique uids + gids) 1\nNumber of uids 1\n\troot (0)\nNumber of gids 1\n\troot (0)\n"
+    },
+    {
+      "bytes": 163840000,
+      "files": 5000,
+      "files_per_second": 2264.41,
+      "mib_per_second": 70.76,
+      "name": "read_squashfs_pack_on_nfs",
+      "seconds": 2.208082,
+      "sha256": "c7fcc0214f3838ff7bc79354bce22d6f39c51d97c4e20594f85a8c8b4ac2d24f"
+    },
+    {
+      "bytes": 163840000,
+      "files": 5000,
+      "files_per_second": 1736.48,
+      "mib_per_second": 54.27,
+      "name": "read_overlay_lower_squashfs",
+      "seconds": 2.879384,
+      "sha256": "c7fcc0214f3838ff7bc79354bce22d6f39c51d97c4e20594f85a8c8b4ac2d24f"
+    },
+    {
+      "bytes": 163840000,
+      "files": 5000,
+      "files_per_second": 404.5,
+      "mib_per_second": 12.64,
+      "name": "write_dirty_overlay_upper_nfs",
+      "seconds": 12.360844,
+      "sync_seconds": 0.011243
+    },
+    {
+      "bytes": 163840000,
+      "files": 5000,
+      "files_per_second": 1332.27,
+      "mib_per_second": 41.63,
+      "name": "read_dirty_overlay_upper_nfs",
+      "seconds": 3.753004,
+      "sha256": "c7fcc0214f3838ff7bc79354bce22d6f39c51d97c4e20594f85a8c8b4ac2d24f"
+    }
+  ],
+  "parameters": {
+    "chunk_kib": 256,
+    "files": 5000,
+    "seed": 20260628,
+    "size_kib": 32,
+    "total_mib": 156.25
+  },
+  "payload_generation_seconds": 0.457912
+}
