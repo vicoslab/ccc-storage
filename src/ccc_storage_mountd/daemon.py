@@ -42,6 +42,7 @@ from ccc_storage_mountd.managed_parent import (
     ManagedParentError,
 )
 from ccc_storage_mountd.observation import ObservationError, ObservationManager
+from ccc_storage_mountd.ownership import Ownership
 from ccc_storage_mountd.overlay import (
     OverlayPaths,
     cleanup_dirty_mirror,
@@ -95,11 +96,14 @@ class MountdService:
         local_overlay_root: str | Path | None = None,
         node_id: str | None = None,
         level_policy: LevelPolicy | None = None,
+        storage_uid: int | None = None,
+        storage_gid: int | None = None,
     ) -> None:
         self.nfs_root = Path(nfs_root)
         self.run_dir = Path(run_dir)
         self.default_write_policy = normalize_write_policy(default_write_policy)
         self.level_policy = level_policy or LevelPolicy.from_env(os.environ)
+        self.ownership = Ownership(uid=storage_uid, gid=storage_gid)
         self.registry_dir = self.nfs_root / "registry"
         self.mounts = ChildMountManager(
             self.run_dir,
@@ -107,6 +111,7 @@ class MountdService:
             nfs_root=self.nfs_root,
             local_overlay_root=local_overlay_root,
             node_id=node_id,
+            ownership=self.ownership,
         )
         self.children: dict[str, ChildManifest] = {}
         self.manifest_paths: dict[str, Path] = {}
@@ -120,6 +125,7 @@ class MountdService:
                 parent_path=managed_parent,
                 mounts=self.mounts,
                 prefer_kernel=prefer_kernel,
+                ownership=self.ownership,
             )
         if observe_root:
             self.observer = ObservationManager(
@@ -127,6 +133,7 @@ class MountdService:
                 observe_root,
                 self.mounts,
                 default_write_policy=self.default_write_policy,
+                ownership=self.ownership,
             )
 
     def reload_registry(self) -> None:
@@ -219,7 +226,7 @@ class MountdService:
     def _commit_shared_nfs(self, selector: str, *, message: str = "") -> dict[str, Any]:
         manifest = self._find(selector)
         paths = self.overlay_paths(manifest)
-        ensure_active_upper(paths)
+        ensure_active_upper(paths, self.ownership)
         stats = dirty_stats(paths.active_upper)
         if not stats.dirty:
             return self._manifest_status(replace(manifest, state="clean"))
@@ -229,9 +236,9 @@ class MountdService:
             # Re-resolve after taking the lock, in case another node committed.
             manifest = self._find(selector)
             paths = self.overlay_paths(manifest)
-            ensure_active_upper(paths)
+            ensure_active_upper(paths, self.ownership)
             new_generation = manifest.generation + 1
-            sealed = seal_active_upper(paths, generation=new_generation)
+            sealed = seal_active_upper(paths, generation=new_generation, ownership=self.ownership)
             try:
                 return self._build_commit_from_source(
                     manifest,
@@ -297,8 +304,20 @@ class MountdService:
     ) -> dict[str, Any]:
         delta_dir = pack_object_dir(self.nfs_root / "packs", manifest.id)
         delta_dir.mkdir(parents=True, exist_ok=True)
+        self.ownership.apply(delta_dir)
         delta_pack = delta_dir / f"delta-g{new_generation:04d}.sqfs"
-        result = build_delta(source, manifest, delta_pack)
+        build_kwargs: dict[str, Any] = {}
+        if self.ownership.uid is not None:
+            build_kwargs["uid"] = self.ownership.uid
+        if self.ownership.gid is not None:
+            build_kwargs["gid"] = self.ownership.gid
+        result = build_delta(
+            source,
+            manifest,
+            delta_pack,
+            **build_kwargs,
+        )
+        self.ownership.apply(delta_pack)
         pack = replace(
             result.pack,
             level=choose_initial_level(self.level_policy, result.pack.size),
@@ -324,6 +343,7 @@ class MountdService:
         )
         manifest_path = self.manifest_paths[manifest.id]
         dump_atomic(manifest_path, updated)
+        self.ownership.apply(manifest_path)
         cleanup()
         self.reload_registry()
         committed = self.children[updated.id]
@@ -354,6 +374,7 @@ class MountdService:
             out,
             target_level=candidate.target_level,
         )
+        self.ownership.apply(out)
         updated, _retired = publish_partial_compaction(
             manifest,
             selected=tuple(candidate.packs),
@@ -361,6 +382,7 @@ class MountdService:
             target_level=candidate.target_level,
         )
         dump_atomic(self.manifest_paths[manifest.id], updated)
+        self.ownership.apply(self.manifest_paths[manifest.id])
         self.reload_registry()
         return self.children[manifest.id]
 
@@ -390,6 +412,7 @@ class MountdService:
         )
         pack_dir = pack_object_dir(self.nfs_root / "packs", manifest.id)
         pack_dir.mkdir(parents=True, exist_ok=True)
+        self.ownership.apply(pack_dir)
         name = f"compact-L{target_level}-g{generation_min:04d}-g{generation_max:04d}.sqfs"
         return pack_dir / name
 
@@ -423,6 +446,7 @@ class MountdService:
             out,
             target_level=candidate.target_level,
         )
+        self.ownership.apply(out)
         updated, retired = publish_partial_compaction(
             manifest,
             selected=tuple(candidate.packs),
@@ -430,6 +454,7 @@ class MountdService:
             target_level=candidate.target_level,
         )
         dump_atomic(self.manifest_paths[manifest.id], updated)
+        self.ownership.apply(self.manifest_paths[manifest.id])
         self.reload_registry()
         status = self._manifest_status(self.children[manifest.id])
         status.update(
@@ -446,12 +471,13 @@ class MountdService:
         manifest = self._find(selector)
         updated = replace(manifest, pinned=pinned)
         dump_atomic(self.manifest_paths[manifest.id], updated)
+        self.ownership.apply(self.manifest_paths[manifest.id])
         self.reload_registry()
         return self._manifest_status(self.children[updated.id])
 
     def _assert_clean_for_write_policy_switch(self, manifest: ChildManifest) -> None:
         paths = self.overlay_paths(manifest)
-        ensure_active_upper(paths)
+        ensure_active_upper(paths, self.ownership)
         stats = dirty_stats(paths.active_upper)
         if stats.dirty:
             raise ChildMountError(
@@ -579,6 +605,8 @@ class MountdService:
             ),
             "runtime": _probe_summary_dict(),
             "default_write_policy": self.default_write_policy,
+            "storage_uid": self.ownership.uid,
+            "storage_gid": self.ownership.gid,
         }
 
     def reap_idle_mounts(self, ttl: float) -> list[str]:
@@ -707,7 +735,7 @@ class MountdService:
     def _manifest_status(self, manifest: ChildManifest) -> dict[str, Any]:
         mount_status = self.mounts.status(manifest)
         paths = self.overlay_paths(manifest)
-        ensure_active_upper(paths)
+        ensure_active_upper(paths, self.ownership)
         latest_mirror = (
             latest_dirty_mirror(self.nfs_root, manifest.id)
             if manifest.write_policy == WRITE_POLICY_LOCAL_SSD_ASYNC
@@ -868,6 +896,27 @@ def _wait_for_mountpoint(path: str | Path, timeout: float) -> bool:
     return _is_mountpoint(path)
 
 
+def _parse_owner_id(value: object, label: str = "owner id") -> int | None:
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = int(text, 10)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"{label} must be a non-negative integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError(f"{label} must be a non-negative integer")
+    return parsed
+
+
+def _env_owner_id(*names: str) -> int | None:
+    for name in names:
+        value = os.environ.get(name)
+        if value not in (None, ""):
+            return _parse_owner_id(value, f"${name}")
+    return None
+
+
 def _write_ready_file(service: MountdService, ready_file: str | Path) -> None:
     path = Path(ready_file)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -986,6 +1035,18 @@ def main(argv: list[str] | None = None, *, prog: str = "ccc-storage mountd") -> 
         help="seconds between safe background log-structured compaction passes; <=0 disables",
     )
     parser.add_argument(
+        "--storage-uid",
+        type=_parse_owner_id,
+        default=None,
+        help="UID to own mountd-created shared storage data (env: CCC_STORAGE_USER_ID or USER_ID)",
+    )
+    parser.add_argument(
+        "--storage-gid",
+        type=_parse_owner_id,
+        default=None,
+        help="GID to own mountd-created shared storage data (env: CCC_STORAGE_GROUP_ID or GROUP_ID)",
+    )
+    parser.add_argument(
         "--observe-ready-timeout",
         type=float,
         default=float(os.environ.get("CCC_OBSERVE_READY_TIMEOUT", "10")),
@@ -1017,6 +1078,20 @@ def main(argv: list[str] | None = None, *, prog: str = "ccc-storage mountd") -> 
     if not ns.nfs_root:
         print(f"{prog}: --nfs-root or $CCC_NFS_ROOT is required")
         return 2
+    try:
+        if ns.storage_uid is None:
+            ns.storage_uid = _env_owner_id("CCC_STORAGE_USER_ID", "USER_ID")
+        if ns.storage_gid is None:
+            ns.storage_gid = _env_owner_id("CCC_STORAGE_GROUP_ID", "GROUP_ID")
+    except argparse.ArgumentTypeError as exc:
+        print(f"{prog}: {exc}")
+        return 2
+    if (ns.storage_uid is None) != (ns.storage_gid is None):
+        print(
+            f"{prog}: configure both --storage-uid/--storage-gid "
+            "or both CCC_STORAGE_USER_ID/CCC_STORAGE_GROUP_ID",
+        )
+        return 2
 
     service = MountdService(
         ns.nfs_root,
@@ -1027,6 +1102,8 @@ def main(argv: list[str] | None = None, *, prog: str = "ccc-storage mountd") -> 
         observe_mountpoint=ns.observe_mountpoint or None,
         default_write_policy=ns.default_write_policy,
         local_overlay_root=ns.local_overlay_root or None,
+        storage_uid=ns.storage_uid,
+        storage_gid=ns.storage_gid,
     )
     service.reload_registry()
     if ns.observe_mountpoint:

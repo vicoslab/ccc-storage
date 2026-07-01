@@ -17,6 +17,8 @@ docker_source_root="${CCC_RUNTIME_DOCKER_SOURCE_ROOT:-}"
 keep="${CCC_RUNTIME_KEEP:-0}"
 skip_build="${CCC_RUNTIME_SKIP_BUILD:-0}"
 timeout_s="${CCC_MOUNTD_CONTAINER_TIMEOUT:-180}"
+mountd_storage_user_id="${CCC_MOUNTD_STORAGE_USER_ID:-2094}"
+mountd_storage_group_id="${CCC_MOUNTD_STORAGE_GROUP_ID:-2094}"
 mountd_name="ccc-storage-mountd-test-$run_id"
 app_name="ccc-storage-app-test-$run_id"
 
@@ -63,6 +65,8 @@ fi
   -e CCC_OBSERVE_ROOT=/ccc-runtime/source \
   -e CCC_OBSERVE_MOUNTPOINT=/ccc-runtime/published \
   -e CCC_MOUNTD_SOCKET_MODE=0600 \
+  -e CCC_STORAGE_USER_ID="$mountd_storage_user_id" \
+  -e CCC_STORAGE_GROUP_ID="$mountd_storage_group_id" \
   "$image_tag" >/dev/null
 
 wait_for_mount() {

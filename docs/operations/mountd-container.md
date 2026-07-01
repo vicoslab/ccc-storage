@@ -12,6 +12,9 @@ Mountd container:
 - uses unconfined AppArmor/seccomp when required by the host FUSE setup
 - mounts the shared storage root with `rw,rshared`
 - owns the private control socket under `/run/ccc-storage`
+- chowns mountd-created shared storage state to the configured client UID/GID
+  (`CCC_STORAGE_USER_ID`/`CCC_STORAGE_GROUP_ID`, or Docker-style
+  `USER_ID`/`GROUP_ID` fallback)
 - does **not** need the Docker socket
 
 App containers:
@@ -49,6 +52,10 @@ published layered folder, commits, remounts, and reads the committed data. See
 - `--observe-ready-timeout 10`: fail startup if the observation FUSE mount is not ready.
 - `--idle-unmount-ttl 300`: clean up idle child mounts.
 - `--idle-reap-interval 30`: cleanup interval.
+- `--storage-uid` / `--storage-gid`: owner forced for mountd-created shared
+  state and committed SquashFS metadata. The container entrypoint reads
+  `CCC_STORAGE_USER_ID`/`CCC_STORAGE_GROUP_ID` first, then `USER_ID`/`GROUP_ID`.
+  CCC development validation defaults these to `2094:2094`.
 
 ## Inventory role
 

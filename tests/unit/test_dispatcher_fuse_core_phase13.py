@@ -5,7 +5,14 @@ import pytest
 from ccc_storage_core.observe import OBSERVE_MARKER_NAME
 from ccc_storage_mountd import childmount
 from ccc_storage_mountd.daemon import MountdService
-from ccc_storage_mountd.dispatcher_fuse import ObservationDispatchCore
+from ccc_storage_mountd.dispatcher_fuse import ObservationDispatchCore, ObservationFuseOperations
+
+
+class FakePyFuse3:
+    ROOT_INODE = 1
+
+    class EntryAttributes:
+        pass
 
 
 class FakeHandle:
@@ -57,6 +64,28 @@ def test_dispatch_core_mkdir_registers_child_but_does_not_mount(fake_nfs, tmp_pa
     listed = service.handle_observe_ls()["children"]
     assert listed[0]["id"] == "observe:user1"
     assert listed[0]["registered"] is True
+
+
+def test_dispatcher_attrs_use_configured_client_uid_gid(fake_nfs, tmp_path):
+    source = tmp_path / "source"
+    mount_root = tmp_path / "mounted"
+    source.mkdir()
+    mount_root.mkdir()
+    (source / OBSERVE_MARKER_NAME).write_text("")
+    service = MountdService(
+        nfs_root=fake_nfs.ccc_storage,
+        run_dir=tmp_path / "run",
+        observe_root=source,
+        storage_uid=2094,
+        storage_gid=2094,
+    )
+    core = ObservationDispatchCore(source, mount_root, service)
+    ops = ObservationFuseOperations(core, FakePyFuse3)
+
+    attrs = ops._attrs(core.entry_for(""))
+
+    assert attrs.st_uid == 2094
+    assert attrs.st_gid == 2094
 
 
 def test_dispatch_core_lazy_access_mounts_only_requested_child(monkeypatch, fake_nfs, tmp_path):

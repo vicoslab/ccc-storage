@@ -19,6 +19,8 @@ CCC_IDLE_REAP_INTERVAL="${CCC_IDLE_REAP_INTERVAL:-30}"
 CCC_DEFAULT_WRITE_POLICY="${CCC_DEFAULT_WRITE_POLICY:-shared-nfs}"
 CCC_LOCAL_OVERLAY_ROOT="${CCC_LOCAL_OVERLAY_ROOT:-${CCC_NODE_RUN_DIR}/local-overlays}"
 CCC_DIRTY_PUBLISH_INTERVAL="${CCC_DIRTY_PUBLISH_INTERVAL:-1}"
+CCC_STORAGE_USER_ID="${CCC_STORAGE_USER_ID:-${USER_ID:-}}"
+CCC_STORAGE_GROUP_ID="${CCC_STORAGE_GROUP_ID:-${GROUP_ID:-}}"
 CCC_MOUNTD_EXTRA_ARGS="${CCC_MOUNTD_EXTRA_ARGS:-}"
 
 mkdir -p \
@@ -51,6 +53,14 @@ if [ -n "${CCC_PROPAGATION_CHECK_PATH:-}" ] && command -v findmnt >/dev/null 2>&
   esac
 fi
 
+if [ -n "$CCC_STORAGE_USER_ID" ] || [ -n "$CCC_STORAGE_GROUP_ID" ]; then
+  : "${CCC_STORAGE_USER_ID:?CCC_STORAGE_USER_ID/USER_ID must be set when CCC_STORAGE_GROUP_ID/GROUP_ID is set}"
+  : "${CCC_STORAGE_GROUP_ID:?CCC_STORAGE_GROUP_ID/GROUP_ID must be set when CCC_STORAGE_USER_ID/USER_ID is set}"
+  storage_owner_args=(--storage-uid "$CCC_STORAGE_USER_ID" --storage-gid "$CCC_STORAGE_GROUP_ID")
+else
+  storage_owner_args=()
+fi
+
 exec ccc-storage mountd \
   --nfs-root "$CCC_NFS_ROOT" \
   --run-dir "$CCC_NODE_RUN_DIR" \
@@ -65,4 +75,5 @@ exec ccc-storage mountd \
   --dirty-publish-interval "$CCC_DIRTY_PUBLISH_INTERVAL" \
   --observe-root "$CCC_OBSERVE_ROOT" \
   --observe-mountpoint "$CCC_OBSERVE_MOUNTPOINT" \
+  "${storage_owner_args[@]}" \
   $CCC_MOUNTD_EXTRA_ARGS

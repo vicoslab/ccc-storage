@@ -199,6 +199,8 @@ def build_delta(
     *,
     comp: str = "zstd",
     block: str = "1M",
+    uid: int | None = None,
+    gid: int | None = None,
 ) -> BuildResult:
     """Build a delta pack from a sealed overlay upper.
 
@@ -210,7 +212,7 @@ def build_delta(
     with tempfile.TemporaryDirectory(prefix="ccc-delta-src-") as tmp:
         prepared = Path(tmp) / "upper"
         prepare_delta_source(src, prepared)
-        return build_pack(prepared, out, comp=comp, block=block)
+        return build_pack(prepared, out, comp=comp, block=block, uid=uid, gid=gid)
 
 
 def build_pack(
@@ -221,6 +223,8 @@ def build_pack(
     block: str = "1M",
     exclude_boundaries: list[str] | None = None,
     exclude_observed: bool = False,
+    uid: int | None = None,
+    gid: int | None = None,
 ) -> BuildResult:
     """Build a SquashFS pack from *src* into *out* using `mksquashfs`."""
     src_path = Path(src)
@@ -257,6 +261,10 @@ def build_pack(
             "-b",
             block,
         ]
+        if uid is not None:
+            args.extend(["-force-uid", str(uid)])
+        if gid is not None:
+            args.extend(["-force-gid", str(gid)])
 
         cp = subprocess.run(args, capture_output=True, text=True, check=False)
     if cp.returncode != 0:

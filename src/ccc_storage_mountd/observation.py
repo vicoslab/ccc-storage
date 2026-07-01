@@ -20,6 +20,7 @@ from ccc_storage_core.observe import immediate_child_boundaries, resolve_observe
 from ccc_storage_mountd.childmount import ChildMountManager
 from ccc_storage_mountd.managed_parent import ChildExistsError, ChildNotFoundError
 from ccc_storage_mountd.overlay import OverlayPaths, dirty_stats, ensure_active_upper
+from ccc_storage_mountd.ownership import Ownership
 from ccc_storage_pack.builder import safe_pack_name
 
 
@@ -41,11 +42,13 @@ class ObservationManager:
         mounts: ChildMountManager,
         *,
         default_write_policy: str = WRITE_POLICY_SHARED_NFS,
+        ownership: Ownership | None = None,
     ) -> None:
         self.nfs_root = Path(nfs_root)
         self.source_root = Path(source_root)
         self.mounts = mounts
         self.default_write_policy = normalize_write_policy(default_write_policy)
+        self.ownership = ownership or Ownership()
         self.registry_dir = self.nfs_root / "registry" / "observe"
         self.overlays_root = self.nfs_root / "overlays"
 
@@ -81,7 +84,15 @@ class ObservationManager:
         manifest_path = self.manifest_path_for_boundary(boundary_path)
         if manifest_path.exists():
             raise ChildExistsError(f"observed child already registered: {boundary_path}")
+        self.registry_dir.mkdir(parents=True, exist_ok=True)
+        self.ownership.apply(self.registry_dir)
         (self.source_root / boundary_path).mkdir(parents=True, exist_ok=True)
+        self.ownership.apply(self.source_root / boundary_path)
+        overlay_paths = OverlayPaths.for_child(
+            self.overlays_root,
+            self.child_id(boundary_path),
+        )
+        ensure_active_upper(overlay_paths, self.ownership)
         manifest = ChildManifest(
             id=self.child_id(boundary_path),
             name=observed.child_name,
@@ -92,17 +103,13 @@ class ObservationManager:
             pack_stack=PackStack(),
             overlay=OverlayInfo(
                 mode="shared-overlay",
-                active_upper=str(
-                    OverlayPaths.for_child(
-                        self.overlays_root,
-                        self.child_id(boundary_path),
-                    ).active_upper
-                ),
+                active_upper=str(overlay_paths.active_upper),
                 overlay_generation=0,
             ),
             write_policy=observed.observation_root.write_policy or self.default_write_policy,
         )
         dump_atomic(manifest_path, manifest)
+        self.ownership.apply(manifest_path)
         return self._status(manifest)
 
     def access_child(self, rel_path: str) -> dict[str, Any]:
@@ -205,13 +212,15 @@ class ObservationManager:
         if old_overlay_paths.root.exists():
             shutil.rmtree(old_overlay_paths.root, ignore_errors=True)
         dump_atomic(new_manifest_path, updated)
+        self.ownership.apply(new_manifest_path)
+        self.ownership.apply(self.source_root / new.boundary_path)
         old_manifest_path.unlink()
         return self._status(updated)
 
     def _status(self, manifest: ChildManifest) -> dict[str, Any]:
         mount_status = self.mounts.status(manifest)
         overlay_paths = OverlayPaths.for_child(self.overlays_root, manifest.id)
-        ensure_active_upper(overlay_paths)
+        ensure_active_upper(overlay_paths, self.ownership)
         stats = dirty_stats(overlay_paths.active_upper)
         state = "dirty" if stats.dirty else manifest.state
         return {

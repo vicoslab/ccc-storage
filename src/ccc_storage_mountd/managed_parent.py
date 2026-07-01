@@ -34,6 +34,7 @@ from ccc_storage_mountd.overlay import (
     dirty_stats,
     ensure_active_upper,
 )
+from ccc_storage_mountd.ownership import Ownership
 
 # Names that are internal bookkeeping, never real children. Hidden from listings
 # and refused as child names (RK-8).
@@ -92,6 +93,7 @@ class ManagedParent:
         parent_id: str = "",
         mounts: ChildMountManager | None = None,
         prefer_kernel: bool = False,
+        ownership: Ownership | None = None,
     ) -> None:
         self.nfs_root = Path(nfs_root)
         self.run_dir = Path(run_dir)
@@ -100,7 +102,12 @@ class ManagedParent:
         self.registry_dir = self.nfs_root / "registry"
         self.overlays_root = self.nfs_root / "overlays"
         self.locks_dir = self.nfs_root / "locks"
-        self.mounts = mounts or ChildMountManager(self.run_dir, prefer_kernel=prefer_kernel)
+        self.ownership = ownership or Ownership()
+        self.mounts = mounts or ChildMountManager(
+            self.run_dir,
+            prefer_kernel=prefer_kernel,
+            ownership=self.ownership,
+        )
 
     # -- paths ---------------------------------------------------------------
 
@@ -108,6 +115,7 @@ class ManagedParent:
     def children_dir(self) -> Path:
         path = self.registry_dir / _safe_name(self.parent_id)
         path.mkdir(parents=True, exist_ok=True)
+        self.ownership.apply(path)
         return path
 
     def manifest_path(self, name: str) -> Path:
@@ -159,7 +167,7 @@ class ManagedParent:
                 raise ChildExistsError(f"child {name!r} already exists under {self.parent_path}")
             child_id = self._child_id(name)
             overlay_paths = OverlayPaths.for_child(self.overlays_root, child_id)
-            ensure_active_upper(overlay_paths)
+            ensure_active_upper(overlay_paths, self.ownership)
             manifest = ChildManifest(
                 id=child_id,
                 name=name,
@@ -176,6 +184,7 @@ class ManagedParent:
                 ),
             )
             dump_atomic(manifest_path, manifest)
+            self.ownership.apply(manifest_path)
         finally:
             lock.release()
         return self._status(manifest)
@@ -206,6 +215,7 @@ class ManagedParent:
             child_boundaries=manifest.child_boundaries,
         )
         dump_atomic(dst, renamed)  # atomic publish of the new manifest
+        self.ownership.apply(dst)
         src.unlink()  # then drop the old name
         return self._status(renamed)
 
@@ -261,7 +271,7 @@ class ManagedParent:
     def _status(self, manifest: ChildManifest) -> dict[str, Any]:
         mount_status = self.mounts.status(manifest)
         overlay_paths = self._overlay_paths(manifest)
-        ensure_active_upper(overlay_paths)
+        ensure_active_upper(overlay_paths, self.ownership)
         stats = dirty_stats(overlay_paths.active_upper)
         state = "dirty" if stats.dirty else manifest.state
         return {

@@ -49,7 +49,7 @@ class AutoCommitWorker:
 
     def evaluate_child(self, manifest: ChildManifest) -> str:
         paths = self.service.overlay_paths(manifest)
-        ensure_active_upper(paths)
+        ensure_active_upper(paths, getattr(self.service, "ownership", None))
         inputs = overlay_inputs(paths.active_upper, now=self._clock())
         return evaluate(self._child_policy(manifest), inputs)
 

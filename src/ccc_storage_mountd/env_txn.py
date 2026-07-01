@@ -155,7 +155,10 @@ class EnvTransaction:
         try:
             # Enable update mode: ensure the writable overlay exists for writes.
             paths = self.service.overlay_paths(manifest)
-            active_upper = ensure_active_upper(paths)
+            active_upper = ensure_active_upper(
+                paths,
+                getattr(self.service, "ownership", None),
+            )
             ctx = EnvUpdateContext(
                 env_id=manifest.id,
                 manifest=manifest,
@@ -217,7 +220,7 @@ def env_status(service: MountdService, selector: str) -> dict[str, Any]:
 
     manifest = service._find(selector)
     paths = service.overlay_paths(manifest)
-    ensure_active_upper(paths)
+    ensure_active_upper(paths, getattr(service, "ownership", None))
     stats = dirty_stats(paths.active_upper)
     dirty = stats.dirty
     lock_path = service.nfs_root / "locks" / f"{_safe_child_name(manifest.id)}.update.lock"

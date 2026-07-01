@@ -106,6 +106,32 @@ def test_build_pack_invokes_mksquashfs_with_deterministic_defaults_and_excludes(
     assert "-e" not in result.args
 
 
+def test_build_pack_can_force_client_uid_gid_in_squashfs_metadata(monkeypatch, tmp_path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "hello.txt").write_text("hi")
+    out = tmp_path / "out.sqfs"
+
+    monkeypatch.setattr(
+        builder.shutil,
+        "which",
+        lambda name: "/bin/mksquashfs" if name == "mksquashfs" else None,
+    )
+
+    def fake_run(args, capture_output, text, check):
+        out.write_bytes(b"sqfs-bytes")
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(builder.subprocess, "run", fake_run)
+
+    result = build_pack(src, out, uid=2094, gid=2094)
+
+    assert "-force-uid" in result.args
+    assert result.args[result.args.index("-force-uid") + 1] == "2094"
+    assert "-force-gid" in result.args
+    assert result.args[result.args.index("-force-gid") + 1] == "2094"
+
+
 def test_build_pack_keeps_boundary_stub_but_excludes_child_payload(monkeypatch, tmp_path):
     src = tmp_path / "src"
     boundary = src / "conda" / "envs" / "env-a"

@@ -18,6 +18,7 @@ from typing import Any
 from ccc_storage_core.manifest import ChildManifest
 from ccc_storage_core.names import safe_namespace_name
 from ccc_storage_core.resolve import resolve_owner_path
+from ccc_storage_mountd.ownership import Ownership
 
 
 @dataclass(frozen=True)
@@ -140,15 +141,23 @@ def _is_overlayfs_artifact(path: Path) -> bool:
     return path.name.startswith(".wh.")
 
 
-def ensure_active_upper(paths: OverlayPaths) -> Path:
+def ensure_active_upper(paths: OverlayPaths, ownership: Ownership | None = None) -> Path:
     paths.active_upper.mkdir(parents=True, exist_ok=True)
     paths.sealed_dir.mkdir(parents=True, exist_ok=True)
+    owner = ownership or Ownership()
+    owner.apply(paths.root)
+    owner.apply(paths.active_upper)
+    owner.apply(paths.sealed_dir)
     return paths.active_upper
 
 
-def ensure_local_upper(paths: LocalOverlayPaths) -> Path:
+def ensure_local_upper(paths: LocalOverlayPaths, ownership: Ownership | None = None) -> Path:
     paths.active_upper.mkdir(parents=True, exist_ok=True)
     paths.work.mkdir(parents=True, exist_ok=True)
+    owner = ownership or Ownership()
+    owner.apply(paths.root)
+    owner.apply(paths.active_upper)
+    owner.apply(paths.work)
     return paths.active_upper
 
 
@@ -206,11 +215,19 @@ def _copy_logical_tree(source: Path, dest: Path) -> None:
             shutil.copy2(entry, target)
 
 
-def _atomic_write_json(path: Path, data: dict[str, object]) -> None:
+def _atomic_write_json(
+    path: Path,
+    data: dict[str, object],
+    ownership: Ownership | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    owner = ownership or Ownership()
+    owner.apply(path.parent)
     tmp = path.with_name(f".{path.name}.tmp")
     tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    owner.apply(tmp)
     os.replace(tmp, path)
+    owner.apply(path)
 
 
 def publish_logical_mirror(
@@ -220,13 +237,19 @@ def publish_logical_mirror(
     child_id: str,
     node_id: str,
     base_generation: int,
+    uid: int | None = None,
+    gid: int | None = None,
+    ownership: Ownership | None = None,
 ) -> DirtyMirror:
     """Publish a complete logical dirty mirror epoch to shared NFS state."""
 
     src = Path(source)
     if not src.is_dir():
         raise FileNotFoundError(f"logical mirror source is not a directory: {src}")
+    owner = ownership or Ownership(uid=uid, gid=gid)
     paths.epochs_dir.mkdir(parents=True, exist_ok=True)
+    owner.apply(paths.root)
+    owner.apply(paths.epochs_dir)
     epoch = _next_epoch(paths)
     epoch_name = f"e{epoch:06d}"
     staging = paths.epochs_dir / f".{epoch_name}.tmp"
@@ -248,14 +271,22 @@ def publish_logical_mirror(
         "bytes": stats.bytes,
         "published_ts": published_ts,
     }
-    _atomic_write_json(staging / "epoch.json", metadata)
+    _atomic_write_json(staging / "epoch.json", metadata, ownership=owner)
+    owner.apply_tree(staging)
     os.replace(staging, final)
+    owner.apply_tree(final)
     latest_tmp = paths.current.with_name(f".{paths.current.name}.tmp")
     if latest_tmp.exists() or latest_tmp.is_symlink():
         latest_tmp.unlink()
     latest_tmp.symlink_to(final / "tree")
+    owner.apply(latest_tmp, follow_symlinks=False)
     os.replace(latest_tmp, paths.current)
-    _atomic_write_json(paths.publish_json, {**metadata, "path": str(final / "tree")})
+    owner.apply(paths.current, follow_symlinks=False)
+    _atomic_write_json(
+        paths.publish_json,
+        {**metadata, "path": str(final / "tree")},
+        ownership=owner,
+    )
     return DirtyMirror(
         child_id=child_id,
         node_id=node_id,
@@ -294,15 +325,24 @@ def cleanup_dirty_mirror(nfs_root: str | Path, child_id: str) -> None:
     shutil.rmtree(dirty_mirror_paths(nfs_root, child_id).root, ignore_errors=True)
 
 
-def seal_active_upper(paths: OverlayPaths, *, generation: int) -> SealedOverlay:
-    ensure_active_upper(paths)
+def seal_active_upper(
+    paths: OverlayPaths,
+    *,
+    generation: int,
+    ownership: Ownership | None = None,
+) -> SealedOverlay:
+    owner = ownership or Ownership()
+    ensure_active_upper(paths, owner)
     paths.sealed_dir.mkdir(parents=True, exist_ok=True)
+    owner.apply(paths.sealed_dir)
     sealed = paths.sealed_dir / f"g{generation:04d}-{int(time.time() * 1000)}"
     if paths.active_upper.exists():
         shutil.move(str(paths.active_upper), sealed)
     else:
         sealed.mkdir(parents=True, exist_ok=True)
+    owner.apply_tree(sealed)
     paths.active_upper.mkdir(parents=True, exist_ok=True)
+    owner.apply(paths.active_upper)
     return SealedOverlay(path=sealed, generation=generation)
 
 

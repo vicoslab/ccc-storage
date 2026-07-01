@@ -25,10 +25,13 @@ from ccc_storage_mountd.overlay import (
     OverlayPaths,
     dirty_mirror_paths,
     dirty_stats,
+    ensure_active_upper,
+    ensure_local_upper,
     latest_dirty_mirror,
     local_overlay_paths,
     publish_logical_mirror,
 )
+from ccc_storage_mountd.ownership import Ownership
 from ccc_storage_pack.reader import (
     MountHandle,
     mount_bind_ro,
@@ -87,6 +90,7 @@ class ChildMountManager:
         local_overlay_root: str | Path | None = None,
         node_id: str | None = None,
         clock: Callable[[], float] = time.monotonic,
+        ownership: Ownership | None = None,
     ) -> None:
         self.run_dir = Path(run_dir)
         self.prefer_kernel = prefer_kernel
@@ -97,6 +101,7 @@ class ChildMountManager:
             else self.run_dir / "local-overlays"
         )
         self.node_id = node_id or socket.gethostname()
+        self.ownership = ownership or Ownership()
         self.mounts_dir = self.run_dir / "mounts"
         self.mounts_dir.mkdir(parents=True, exist_ok=True)
         self._clock = clock
@@ -281,6 +286,7 @@ class ChildMountManager:
             )
         if not require_existing and prepare_mountpoint:
             mountpoint.mkdir(parents=True, exist_ok=True)
+            self.ownership.apply(mountpoint)
         active_upper = Path(manifest.overlay.active_upper)
         if not manifest.overlay.active_upper:
             raise ChildMountError(f"manifest {manifest.id} has no active overlay upper")
@@ -290,6 +296,7 @@ class ChildMountManager:
             active_upper=active_upper,
             sealed_dir=overlay_root / "sealed",
         )
+        ensure_active_upper(overlay_paths, self.ownership)
         handle = mount_layered_rw(
             manifest.pack_stack.lowers,
             overlay_paths,
@@ -337,6 +344,7 @@ class ChildMountManager:
         if local_paths.active_upper.exists():
             shutil.rmtree(local_paths.active_upper)
         shutil.copytree(latest.path, local_paths.active_upper, symlinks=True)
+        self.ownership.apply_tree(local_paths.active_upper)
 
     def _mount_published_mirror_ro(
         self,
@@ -360,6 +368,9 @@ class ChildMountManager:
                 f"local writer lock is held for {manifest.id} and no published mirror exists"
             )
         mnt = Path(mountpoint)
+        if prepare_mountpoint:
+            mnt.mkdir(parents=True, exist_ok=True)
+            self.ownership.apply(mnt)
         handle: MountHandle
         if manifest.pack_stack.lowers:
             handle = mount_dirs_and_packs_ro(
@@ -410,6 +421,8 @@ class ChildMountManager:
             )
         local_paths = local_overlay_paths(self.local_overlay_root, manifest.id)
         local_paths.root.mkdir(parents=True, exist_ok=True)
+        self.ownership.apply(local_paths.root)
+        ensure_local_upper(local_paths, self.ownership)
         self._hydrate_local_upper_from_latest_mirror(manifest, local_paths)
         try:
             handle = mount_layered_rw_kernel_overlay(
@@ -461,6 +474,7 @@ class ChildMountManager:
                 child_id=record.manifest_id,
                 node_id=self.node_id,
                 base_generation=record.base_generation,
+                ownership=self.ownership,
             )
 
     def publish_dirty(self, manifest_id: str) -> DirtyMirror | None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 from pathlib import Path
 
@@ -8,6 +9,7 @@ import pytest
 
 from ccc_storage_core.checksum import sha256_file
 from ccc_storage_core.manifest import ChildManifest, OverlayInfo, PackInfo, PackStack, dump_atomic
+from ccc_storage_core.observe import OBSERVE_MARKER_NAME
 from ccc_storage_core.protocol import Request
 from ccc_storage_mountd import childmount, daemon
 from ccc_storage_mountd.control import ControlServer
@@ -112,6 +114,12 @@ def test_mountd_docker_artifacts_are_dedicated_service_container():
     assert "exec ccc-storage mountd" in entry_text
     assert "--observe-mountpoint" in entry_text
     assert "--socket-mode" in entry_text
+    assert "--storage-uid" in entry_text
+    assert "--storage-gid" in entry_text
+    assert "CCC_STORAGE_USER_ID" in entry_text
+    assert "CCC_STORAGE_GROUP_ID" in entry_text
+    assert "USER_ID" in entry_text
+    assert "GROUP_ID" in entry_text
     assert "/var/run/docker.sock" not in entry_text
 
     smoke_text = smoke.read_text()
@@ -121,6 +129,10 @@ def test_mountd_docker_artifacts_are_dedicated_service_container():
     assert "bind-propagation=rslave" in smoke_text
     assert "--device /dev/fuse" in smoke_text
     assert "--cap-add SYS_ADMIN" in smoke_text
+    assert "CCC_MOUNTD_STORAGE_USER_ID:-2094" in smoke_text
+    assert "CCC_MOUNTD_STORAGE_GROUP_ID:-2094" in smoke_text
+    assert "CCC_STORAGE_USER_ID" in smoke_text
+    assert "CCC_STORAGE_GROUP_ID" in smoke_text
     app_section = smoke_text.split('--name "$app_name"', 1)[1]
     assert "--cap-add SYS_ADMIN" not in app_section
     assert "CCC_MOUNTD_SOCK" not in app_section
@@ -159,6 +171,36 @@ def test_ready_file_contains_doctor_json(fake_nfs, tmp_path):
     assert data["nfs_root"] == str(fake_nfs.ccc_storage)
     assert data["observation_mountpoint"] == str(tmp_path / "published")
     assert data["active_submount_count"] == 0
+
+
+def test_mountd_service_chowns_observation_state_to_configured_client_owner(
+    monkeypatch,
+    fake_nfs,
+    tmp_path,
+):
+    chowned: list[tuple[Path, int, int, bool]] = []
+
+    def record_chown(path, uid, gid, *, follow_symlinks=True):
+        chowned.append((Path(path), uid, gid, follow_symlinks))
+
+    monkeypatch.setattr(os, "chown", record_chown)
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / OBSERVE_MARKER_NAME).write_text("")
+    service = MountdService(
+        fake_nfs.ccc_storage,
+        tmp_path / "run",
+        observe_root=source,
+        storage_uid=2094,
+        storage_gid=2094,
+    )
+
+    status = service.handle_observe_mkdir("env-a")
+
+    paths = {path for path, uid, gid, _follow in chowned if (uid, gid) == (2094, 2094)}
+    assert source / "env-a" in paths
+    assert fake_nfs.ccc_storage / "registry" / "observe" / "env-a.toml" in paths
+    assert Path(status["overlay"]["active_upper"]) in paths
 
 
 def test_mountd_loop_runs_background_compaction_interval(monkeypatch):
@@ -225,7 +267,13 @@ def test_mountd_cli_exposes_production_safety_flags():
         "--idle-unmount-ttl",
         "--idle-reap-interval",
         "--compaction-interval",
+        "--storage-uid",
+        "--storage-gid",
     ):
         assert flag in text
     assert "CCC_COMPACT_INTERVAL_SECONDS" in text
+    assert "CCC_STORAGE_USER_ID" in text
+    assert "CCC_STORAGE_GROUP_ID" in text
+    assert "USER_ID" in text
+    assert "GROUP_ID" in text
     assert "run_background_compaction_once" in text

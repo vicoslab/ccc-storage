@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pytest
 
 from ccc_storage_core.checksum import sha256_file
@@ -64,6 +67,44 @@ def test_local_async_status_reports_latest_published_mirror(fake_nfs, tmp_path):
     assert status["overlay"]["dirty"] is True
     assert status["overlay"]["file_count"] == 1
     assert status["overlay"]["latest_dirty_epoch"] == 1
+
+
+def test_publish_logical_mirror_chowns_published_epoch_to_configured_client_owner(
+    monkeypatch,
+    fake_nfs,
+    tmp_path,
+):
+    _service, manifest, _ = _write_local_async_child(fake_nfs)
+    merged = tmp_path / "merged"
+    merged.mkdir()
+    (merged / "created.txt").write_text("created")
+    chowned: list[tuple[Path, int, int, bool]] = []
+
+    def record_chown(path, uid, gid, *, follow_symlinks=True):
+        chowned.append((Path(path), uid, gid, follow_symlinks))
+
+    monkeypatch.setattr(os, "chown", record_chown)
+    mirror_paths = dirty_mirror_paths(fake_nfs.ccc_storage, manifest.id)
+
+    mirror = publish_logical_mirror(
+        merged,
+        mirror_paths,
+        child_id=manifest.id,
+        node_id="node-a",
+        base_generation=manifest.generation,
+        uid=2094,
+        gid=2094,
+    )
+
+    calls = {
+        (path, follow)
+        for path, uid, gid, follow in chowned
+        if (uid, gid) == (2094, 2094)
+    }
+    assert (mirror.path / "created.txt", True) in calls
+    assert (mirror.path.parent / "epoch.json", True) in calls
+    assert (mirror_paths.publish_json, True) in calls
+    assert (mirror_paths.current, False) in calls
 
 
 def test_local_async_commit_builds_delta_from_published_mirror_and_cleans_async_state(

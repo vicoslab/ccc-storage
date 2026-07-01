@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ccc_storage_core.observe import resolve_observed_child
+from ccc_storage_mountd.ownership import Ownership
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ccc_storage_mountd.daemon import MountdService
@@ -55,6 +56,7 @@ class ObservationDispatchCore:
         self.source_root = Path(source_root)
         self.mount_root = Path(mount_root)
         self.service = service
+        self.ownership = getattr(service, "ownership", Ownership())
         self.materialize_mountpoints = materialize_mountpoints
 
     def validate_name(self, name: str | bytes) -> str:
@@ -111,7 +113,9 @@ class ObservationDispatchCore:
         # already exists virtually; recursive mkdir failures are ignored there.
         if self.materialize_mountpoints:
             with contextlib_suppress_oserror():
-                self.mount_path(status["parent_path"]).mkdir(parents=True, exist_ok=True)
+                mountpoint = self.mount_path(status["parent_path"])
+                mountpoint.mkdir(parents=True, exist_ok=True)
+                self.ownership.apply(mountpoint)
         return DispatchEntry(path=status["parent_path"], name=status["name"], kind="dir")
 
     def ensure_mounted_for(self, rel_path: str | Path) -> dict[str, Any] | None:
@@ -123,6 +127,7 @@ class ObservationDispatchCore:
         if self.materialize_mountpoints:
             with contextlib_suppress_oserror():
                 mountpoint.mkdir(parents=True, exist_ok=True)
+                self.ownership.apply(mountpoint)
         return self.service.handle_observe_access_at(rel, str(mountpoint))
 
 
@@ -281,8 +286,8 @@ class ObservationFuseOperations:  # pragma: no cover - exercised by runtime smok
         attr.attr_timeout = 0.1
         attr.st_mode = _mode_for(entry)
         attr.st_nlink = 2 if entry.kind == "dir" else 1
-        attr.st_uid = os.getuid()
-        attr.st_gid = os.getgid()
+        attr.st_uid = self.core.ownership.attr_uid
+        attr.st_gid = self.core.ownership.attr_gid
         attr.st_rdev = 0
         attr.st_size = entry.size
         now = _now_ns()
