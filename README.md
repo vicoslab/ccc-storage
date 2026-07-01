@@ -4,8 +4,6 @@ CCC storage reduces shared-NFS pressure from millions of small files by
 serving normal-looking folders from immutable SquashFS packs plus a small shared
 write overlay.
 
-The first production target is CCC conda envs and dataset folders:
-
 ```text
 many small files on NFS
   -> commit into one SquashFS pack
@@ -16,13 +14,12 @@ many small files on NFS
 
 ## Concepts
 
-- **Pack**: a SquashFS file containing a committed generation.
-- **Overlay**: shared writable upperdir for changes before the next commit.
-- **Container-ready**: the dedicated Docker container that owns FUSE and publishes the
-- live folder view. Client containers do not get the mountd socket.
-- **Conda-ready**: support for use in conda as storage for environments
-- **Cold storage:** S3 support for cold storage of SquashFS files
-- **HPC integration:** support for accessing the data from HPC systems (e.g. SLURM) through FUSE
+- **Pack**: a SquashFS files containing a committed generation in LSM-tree structure for optimal merging.
+- **Overlay**: shared writable upperdir for changes before the next commit with support for faster but local (SSD) and shared but slower mounts (NFS).
+- **Container-ready**: the dedicated Docker container that owns FUSE and publishes the live folder view, client containers do not get the mountd socket.
+- **Conda-ready**: support for use in conda/mamba as storage for environments.
+- **Cold storage:** S3 support for cold storage of SquashFS files.
+- **HPC integration:** support for accessing the data from HPC systems (e.g. SLURM) through FUSE with pre-loading and on-demand (lazy) reading.
 
 ## Build
 
