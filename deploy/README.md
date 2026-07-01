@@ -39,6 +39,12 @@ uses `deploy/docker/mountd-entrypoint.sh`, and exposes a mountd health check. It
 is separate from `dev/docker/test.Dockerfile`, which is a development/test
 image.
 
+The release workflow publishes this mountd image, not a client CLI image. Tags
+matching `v<digits>.<digits>` (for example `v1.0` or `v0.01`) are pushed to
+Docker Hub as `vicoslab/ccc-storage:<tag>` and `vicoslab/ccc-storage:latest`.
+Client containers should install the user-facing `ccc-storage` CLI with `pip`
+when that integration is added.
+
 ## Systemd unit
 
 `deploy/systemd/ccc-storage-mountd.service` is an opt-in template for running the

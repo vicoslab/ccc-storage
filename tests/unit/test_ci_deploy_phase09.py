@@ -6,6 +6,39 @@ ROOT = Path(__file__).resolve().parents[2]
 CI = ROOT / ".github" / "workflows" / "ci.yml"
 
 
+def test_mountd_docker_workflows_target_docker_hub_and_mountd_image_only():
+    release = ROOT / ".github" / "workflows" / "mountd-docker-release.yml"
+    dev = ROOT / ".github" / "workflows" / "mountd-docker-dev.yml"
+
+    assert release.exists(), release
+    assert dev.exists(), dev
+
+    release_text = release.read_text()
+    dev_text = dev.read_text()
+    combined = release_text + "\n" + dev_text
+
+    assert "deploy/docker/mountd.Dockerfile" in release_text
+    assert "deploy/docker/mountd.Dockerfile" in dev_text
+    assert "dev/docker/test.Dockerfile" not in combined
+    assert "vicoslab/ccc-storage" in combined
+    assert "docker/build-push-action@v6" in combined
+
+    assert "^v[0-9]+\\.[0-9]+$" in release_text
+    assert "type=raw,value=${{ steps.version.outputs.tag }}" in release_text
+    assert "type=raw,value=latest" in release_text
+    assert "push: true" in release_text
+    assert "docker/login-action@v3" in release_text
+    assert "secrets.DOCKERHUB_USERNAME" in release_text
+    assert "secrets.DOCKERHUB_TOKEN" in release_text
+
+    assert "pull_request:" in dev_text
+    assert "push: false" in dev_text
+
+    ci_text = CI.read_text()
+    assert "docker build -f deploy/docker/mountd.Dockerfile -t ccc-storage-mountd:ci ." in ci_text
+    assert "docker build -f dev/docker/test.Dockerfile" not in ci_text
+
+
 def test_ci_workflow_has_always_on_and_conditional_lanes():
     text = CI.read_text()
 

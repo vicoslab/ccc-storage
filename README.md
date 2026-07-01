@@ -37,6 +37,13 @@ Production mountd image:
 docker build -f deploy/docker/mountd.Dockerfile -t ccc-storage-mountd:local .
 ```
 
+GitHub Actions builds the same `deploy/docker/mountd.Dockerfile` for development
+validation.  Pushing a release tag matching `v<digits>.<digits>` (for example
+`v1.0` or `v0.01`) publishes the mountd image to Docker Hub as
+`vicoslab/ccc-storage:<tag>` and `vicoslab/ccc-storage:latest`.  The published
+Docker image is intentionally the mountd service image only; user-facing CLI
+tools are installed into client containers with `pip`.
+
 ## Run checks
 
 ```bash

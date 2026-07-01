@@ -173,7 +173,7 @@ jobs:
             echo 'skip with reason: Docker daemon unavailable'
             exit 0
           fi
-          docker build -f dev/docker/test.Dockerfile -t ccc-storage:test .
+          docker build -f deploy/docker/mountd.Dockerfile -t ccc-storage-mountd:ci .
 
   real-s3:
     name: conditional real-S3 lane
