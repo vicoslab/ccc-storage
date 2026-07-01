@@ -1,4 +1,10 @@
-"""Object-store abstractions for local tests and real S3-compatible backends."""
+"""Generic object-store abstractions for CCC cold storage.
+
+S3 is currently the only network backend, but the rest of CCC storage should
+import this module rather than an HPC-specific namespace. The protocol is tiny
+on purpose: cold storage stores immutable committed pack objects and manifest
+snapshots, not live filesystem state.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +19,7 @@ class ObjectStoreError(RuntimeError):
 
 
 class ObjectStore(Protocol):
-    """Small object-store protocol used by S3 mirror/recall helpers."""
+    """Small object-store protocol used by cold mirror/archive/recall helpers."""
 
     def put_file(self, key: str, source: str | Path) -> None: ...
 
@@ -26,6 +32,8 @@ class ObjectStore(Protocol):
 
 @dataclass(frozen=True)
 class S3Config:
+    """Configuration for the S3-compatible cold-storage backend."""
+
     bucket: str
     endpoint_url: str
     region_name: str = "us-east-1"
@@ -76,9 +84,21 @@ class LocalObjectStore:
     def exists(self, key: str) -> bool:
         return self._path(key).is_file()
 
+    def delete_prefix(self, prefix: str) -> int:
+        clean = _clean_key(prefix)
+        root = self.root / clean
+        if not root.exists():
+            return 0
+        count = sum(1 for item in root.rglob("*") if item.is_file()) if root.is_dir() else 1
+        if root.is_dir():
+            shutil.rmtree(root)
+        else:
+            root.unlink()
+        return count
+
 
 class Boto3ObjectStore:
-    """S3-compatible object store backed by boto3.
+    """S3-compatible cold-storage backend backed by boto3.
 
     The constructor accepts an injected client for unit tests. Without one,
     boto3 is imported lazily so the base package still imports without the S3
@@ -225,7 +245,7 @@ def _make_boto3_client(config: S3Config) -> Any:
         import boto3
         from botocore.config import Config
     except ImportError as exc:  # pragma: no cover - optional dependency path
-        raise ObjectStoreError("boto3/botocore are required for S3 object storage") from exc
+        raise ObjectStoreError("boto3/botocore are required for S3 cold storage") from exc
 
     return boto3.client(
         "s3",

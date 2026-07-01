@@ -12,9 +12,9 @@ import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from ccc_storage_cold.object_store import ObjectStore, ObjectStoreError
 from ccc_storage_core.checksum import sha256_file
 from ccc_storage_hpc.importqueue import ImportQueue, ImportRecord, Provenance
-from ccc_storage_hpc.object_store import ObjectStore, ObjectStoreError
 
 
 @dataclass(frozen=True)

@@ -45,6 +45,7 @@ def test_storage_top_level_help_lists_tool_namespaces_and_direct_ops(capsys) -> 
         "ccc-storage pack",
         "mountd",
         "hpc",
+        "cold",
         "conda",
         "mamba",
         "benchmark",

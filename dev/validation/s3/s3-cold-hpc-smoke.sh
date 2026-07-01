@@ -90,6 +90,8 @@ from pathlib import Path
 
 from ccc_storage_core.checksum import sha256_file
 from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack, dump_atomic, load_manifest
+from ccc_storage_cold.archive import archive_committed_packs_to_cold_storage, recall_cold_pack
+from ccc_storage_cold.object_store import Boto3ObjectStore, ObjectStoreError
 from ccc_storage_hpc.hpc_s3_exchange import (
     fetch_hpc_packset_bundle,
     import_hpc_delta_from_s3,
@@ -97,8 +99,6 @@ from ccc_storage_hpc.hpc_s3_exchange import (
     publish_hpc_packset_bundle,
 )
 from ccc_storage_hpc.importqueue import ImportQueue, Provenance
-from ccc_storage_hpc.object_store import Boto3ObjectStore, ObjectStoreError
-from ccc_storage_hpc.s3mirror import archive_committed_packs_to_cold_storage, recall_cold_pack
 from ccc_storage_mountd.daemon import MountdService
 from ccc_storage_pack.bundle import (
     BundleEntry,

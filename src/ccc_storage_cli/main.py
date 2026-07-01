@@ -31,6 +31,9 @@ CONTROL_COMMANDS = (
     "publish",
     "commit",
     "compact",
+    "cold-status",
+    "cold-archive",
+    "cold-recall",
     "pin",
     "write-policy",
     "ls",
@@ -169,6 +172,8 @@ def _socket_command(ns: argparse.Namespace) -> int:
     if ns.cmd == "compact":
         payload["dry_run"] = bool(getattr(ns, "dry_run", False))
         payload["allow_base"] = bool(getattr(ns, "allow_base", False))
+    if ns.cmd == "cold-archive":
+        payload["keep_hot"] = bool(getattr(ns, "keep_hot", False))
     code, result = _request(ns.cmd, path=getattr(ns, "path", ""), payload=payload)
     if code != 0:
         if getattr(ns, "json", False):
@@ -185,6 +190,16 @@ def _init_conda_envs_command(ns: argparse.Namespace) -> int:
     result = {"path": str(Path(ns.path)), "marker": str(marker)}
     _print_result(result, as_json=getattr(ns, "json", False))
     return 0
+
+
+def _cold_command(ns: argparse.Namespace) -> int:
+    mapping = {
+        "status": "cold-status",
+        "archive": "cold-archive",
+        "recall": "cold-recall",
+    }
+    ns.cmd = mapping[ns.cold_cmd]
+    return _socket_command(ns)
 
 
 def main(argv: list[str] | None = None, *, prog: str = "ccc-storage") -> int:
@@ -225,6 +240,31 @@ def main(argv: list[str] | None = None, *, prog: str = "ccc-storage") -> int:
     )
     compact.add_argument("--json", action="store_true")
     compact.set_defaults(func=_socket_command)
+
+    cold = sub.add_parser("cold", help="cold-storage status/archive/recall operations")
+    cold_sub = cold.add_subparsers(dest="cold_cmd", required=True)
+    cold_status = cold_sub.add_parser("status", help="show cold-storage state for a child")
+    cold_status.add_argument("path")
+    cold_status.add_argument("--json", action="store_true")
+    cold_status.set_defaults(func=_cold_command)
+
+    cold_archive = cold_sub.add_parser(
+        "archive",
+        help="push committed packs to cold storage; evict hot packs unless --keep-hot",
+    )
+    cold_archive.add_argument("path")
+    cold_archive.add_argument(
+        "--keep-hot",
+        action="store_true",
+        help="mirror to cold storage but keep hot/NFS packs present",
+    )
+    cold_archive.add_argument("--json", action="store_true")
+    cold_archive.set_defaults(func=_cold_command)
+
+    cold_recall = cold_sub.add_parser("recall", help="pull cold packs back to hot storage")
+    cold_recall.add_argument("path")
+    cold_recall.add_argument("--json", action="store_true")
+    cold_recall.set_defaults(func=_cold_command)
 
     pin = sub.add_parser("pin", help="pin/unpin a child to exempt it from cold-tier GC")
     pin.add_argument("path")

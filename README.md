@@ -18,7 +18,9 @@ many small files on NFS
 - **Overlay**: shared writable upperdir for changes before the next commit with support for faster but local (SSD) and shared but slower mounts (NFS).
 - **Container-ready**: the dedicated Docker container that owns FUSE and publishes the live folder view, client containers do not get the mountd socket.
 - **Conda-ready**: support for use in conda/mamba as storage for environments.
-- **Cold storage:** S3 support for cold storage of SquashFS files.
+- **Cold storage:** generic archive/recall support for committed SquashFS packs.
+  S3-compatible object storage is the current backend; archive mode can evict
+  hot packs, while mirror mode keeps hot packs and maintains a backend copy.
 - **HPC integration:** support for accessing the data from HPC systems (e.g. SLURM) through FUSE with pre-loading and on-demand (lazy) reading.
 
 ## Build
@@ -69,6 +71,7 @@ ccc-storage doctor
 ccc-storage observe-ls
 ccc-storage observe-mkdir my-env
 ccc-storage status observe:my-env
+ccc-storage cold status observe:my-env --json
 ccc-storage commit observe:my-env -m "updated env"
 ```
 
@@ -86,6 +89,7 @@ managed layered env. If mountd/shared state is absent, normal conda still works.
 
 - Deployment artifacts: `deploy/README.md`
 - CLI tools reference: `docs/operations/cli-tools.md`
+- Cold storage operation and design: `docs/operations/cold-storage.md`
 - Mountd container operation: `docs/operations/mountd-container.md`
 - Conda/mamba shim: `docs/operations/conda-shim.md`
 - Log-structured compaction operation: `docs/operations/log-structured-compaction.md`

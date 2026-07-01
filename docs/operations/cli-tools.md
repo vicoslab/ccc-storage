@@ -8,8 +8,8 @@ ccc-storage <command> [args...]
 
 The command has two layers:
 
-- Tool namespaces: `pack`, `mountd`, `hpc`, `conda`, `mamba`, and `benchmark`.
-- Direct mountd-control operations: `doctor`, `status`, `mount`, `commit`, `compact`, `observe-ls`, `init-conda-envs`, and the other control verbs listed by top-level help.
+- Tool namespaces: `pack`, `mountd`, `hpc`, `cold`, `conda`, `mamba`, and `benchmark`.
+- Direct mountd-control operations: `doctor`, `status`, `mount`, `commit`, `compact`, `cold-status`, `cold-archive`, `cold-recall`, `observe-ls`, `init-conda-envs`, and the other control verbs listed by top-level help.
 
 Regenerate/check help locally from the repository root with:
 
@@ -33,6 +33,7 @@ ccc-storage pack --help
 | `ccc-storage mountd` | Run the per-node privileged mount/control daemon, including managed parents, observation roots, dirty publishing, and background compaction. |
 | `ccc-storage pack` | Build, verify, and inspect immutable SquashFS packs and child manifests. |
 | `ccc-storage hpc` | External-HPC packset client foundation; current runtime mount/push adapters are placeholders. |
+| `ccc-storage cold` | Cold-storage operator commands for status, archive/mirror, and recall. |
 | `ccc-storage conda` | Transparent conda shim: mutating managed-env commands run under CCC env transaction/commit; unmanaged or non-mutating commands pass through to real conda. |
 | `ccc-storage mamba` | Transparent mamba shim with the same CCC managed-env transaction behavior as `ccc-storage conda`. |
 | `ccc-storage benchmark` | Generate deterministic small-file write/read workloads and report JSON performance metrics. |
@@ -44,7 +45,7 @@ ccc-storage pack --help
 Captured command: `PYTHONPATH=src python -m ccc_storage.main --help`
 
 ```text
-usage: ccc-storage [-h] [--version] {pack,mountd,hpc,conda,mamba,benchmark,doctor,status,mount,mount-tree,umount,publish,commit,compact,pin,write-policy,ls,parent-ls,create,rmdir,access,observe-ls,observe-mkdir,observe-access,rename,env-txn,env-status,init-conda-envs,import,hpc-export} ...
+usage: ccc-storage [-h] [--version] {pack,mountd,hpc,cold,conda,mamba,benchmark,doctor,status,mount,mount-tree,umount,publish,commit,compact,cold-status,cold-archive,cold-recall,pin,write-policy,ls,parent-ls,create,rmdir,access,observe-ls,observe-mkdir,observe-access,rename,env-txn,env-status,init-conda-envs,import,hpc-export} ...
 
 Unified CCC storage CLI.
 
@@ -56,11 +57,12 @@ tool namespaces:
   pack       build, verify, and inspect immutable SquashFS packs
   mountd     run the per-node privileged mount/control daemon
   hpc        stage external-HPC packsets and import/export deltas
+  cold       inspect, archive, and recall cold-storage packs
   conda      run the conservative managed-env conda shim
   mamba      run the conservative managed-env mamba shim
   benchmark  run deterministic small-file write/read benchmarks
 
-control operations through mountd:
+mountd control operations:
   doctor           mountd control operation
   status           mountd control operation
   mount            mountd control operation
@@ -69,6 +71,9 @@ control operations through mountd:
   publish          mountd control operation
   commit           mountd control operation
   compact          mountd control operation
+  cold-status      mountd control operation
+  cold-archive     mountd control operation
+  cold-recall      mountd control operation
   pin              mountd control operation
   write-policy     mountd control operation
   ls               mountd control operation
@@ -118,6 +123,39 @@ options:
   --json
 ```
 
+### `ccc-storage cold`
+
+Cold-storage commands talk to the running mountd and use the same locking,
+registry lookup, archive, and recall implementation as automatic mount/access
+paths.
+
+```text
+usage: ccc-storage cold [-h] {status,archive,recall} ...
+
+positional arguments:
+  {status,archive,recall}
+    status              show cold-storage state for a child
+    archive             push committed packs to cold storage; evict hot packs
+                        unless --keep-hot
+    recall              pull cold packs back to hot storage
+
+options:
+  -h, --help            show this help message and exit
+```
+
+Common operations:
+
+```bash
+ccc-storage cold status dataset:photos --json
+ccc-storage cold archive dataset:photos --json
+ccc-storage cold archive dataset:photos --keep-hot --json
+ccc-storage cold recall dataset:photos --json
+```
+
+`archive` evicts hot pack files after a successful upload by default. Add
+`--keep-hot` to make it a mirror/sync operation instead. See
+[`cold-storage.md`](cold-storage.md) for the public design and operator guide.
+
 ### `ccc-storage mountd`
 
 Captured command: `PYTHONPATH=src python -m ccc_storage.main mountd --help`
@@ -133,6 +171,9 @@ usage: ccc-storage mountd [-h] [--version] [--probe] [--nfs-root NFS_ROOT]
                           [--local-overlay-root LOCAL_OVERLAY_ROOT]
                           [--dirty-publish-interval DIRTY_PUBLISH_INTERVAL]
                           [--compaction-interval COMPACTION_INTERVAL]
+                          [--cold-storage-interval COLD_STORAGE_INTERVAL]
+                          [--storage-uid STORAGE_UID]
+                          [--storage-gid STORAGE_GID]
                           [--observe-ready-timeout OBSERVE_READY_TIMEOUT]
                           [--ready-file READY_FILE]
                           [--idle-unmount-ttl IDLE_UNMOUNT_TTL]
@@ -174,6 +215,15 @@ options:
   --compaction-interval COMPACTION_INTERVAL
                         seconds between safe background log-structured
                         compaction passes; <=0 disables
+  --cold-storage-interval COLD_STORAGE_INTERVAL
+                        seconds between automatic cold-storage archival scans;
+                        <=0 disables
+  --storage-uid STORAGE_UID
+                        UID to own mountd-created shared storage data (env:
+                        CCC_STORAGE_USER_ID or USER_ID)
+  --storage-gid STORAGE_GID
+                        GID to own mountd-created shared storage data (env:
+                        CCC_STORAGE_GROUP_ID or GROUP_ID)
   --observe-ready-timeout OBSERVE_READY_TIMEOUT
                         seconds to wait for --observe-mountpoint before
                         serving

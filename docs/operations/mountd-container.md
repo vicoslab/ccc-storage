@@ -52,6 +52,10 @@ published layered folder, commits, remounts, and reads the committed data. See
 - `--observe-ready-timeout 10`: fail startup if the observation FUSE mount is not ready.
 - `--idle-unmount-ttl 300`: clean up idle child mounts.
 - `--idle-reap-interval 30`: cleanup interval.
+- `--compaction-interval 3600`: optional background log-structured compaction scan.
+- `--cold-storage-interval 604800`: optional automatic cold-storage archival scan;
+  `<=0` disables the scan. Cold-storage backend settings come from
+  `CCC_COLD_STORAGE_*`/`CCC_S3_*` environment variables.
 - `--storage-uid` / `--storage-gid`: owner forced for mountd-created shared
   state and committed SquashFS metadata. The container entrypoint reads
   `CCC_STORAGE_USER_ID`/`CCC_STORAGE_GROUP_ID` first, then `USER_ID`/`GROUP_ID`.

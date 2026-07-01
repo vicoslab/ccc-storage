@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -43,12 +44,14 @@ class ObservationManager:
         *,
         default_write_policy: str = WRITE_POLICY_SHARED_NFS,
         ownership: Ownership | None = None,
+        prepare_manifest: Callable[[ChildManifest], ChildManifest] | None = None,
     ) -> None:
         self.nfs_root = Path(nfs_root)
         self.source_root = Path(source_root)
         self.mounts = mounts
         self.default_write_policy = normalize_write_policy(default_write_policy)
         self.ownership = ownership or Ownership()
+        self.prepare_manifest = prepare_manifest or (lambda manifest: manifest)
         self.registry_dir = self.nfs_root / "registry" / "observe"
         self.overlays_root = self.nfs_root / "overlays"
 
@@ -119,7 +122,7 @@ class ObservationManager:
         manifest_path = self.manifest_path_for_boundary(observed.boundary_path)
         if not manifest_path.exists():
             raise ChildNotFoundError(f"observed child is not registered: {observed.boundary_path}")
-        manifest = load_manifest(manifest_path)
+        manifest = self.prepare_manifest(load_manifest(manifest_path))
         self.mounts.mount_rw(manifest)
         return self._status(manifest)
 
@@ -130,7 +133,7 @@ class ObservationManager:
         manifest_path = self.manifest_path_for_boundary(observed.boundary_path)
         if not manifest_path.exists():
             raise ChildNotFoundError(f"observed child is not registered: {observed.boundary_path}")
-        manifest = load_manifest(manifest_path)
+        manifest = self.prepare_manifest(load_manifest(manifest_path))
         self.mounts.mount_rw_at(
             manifest,
             mountpoint,

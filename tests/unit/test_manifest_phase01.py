@@ -5,6 +5,7 @@ import pytest
 from ccc_storage_core.manifest import (
     ChildBoundary,
     ChildManifest,
+    ColdStorageInfo,
     OverlayInfo,
     PackInfo,
     PackStack,
@@ -87,3 +88,60 @@ def test_manifest_rejects_unsupported_newer_schema(tmp_path):
 
     with pytest.raises(UnsupportedSchemaVersion):
         load_manifest(path)
+
+
+def test_manifest_writes_canonical_cold_storage_table(tmp_path):
+    path = tmp_path / "cold.toml"
+    manifest = ChildManifest(
+        id="dataset:photos",
+        name="photos",
+        type="dataset",
+        generation=5,
+        s3=ColdStorageInfo(
+            backend="s3",
+            mode="archive",
+            pack_state="cold",
+            snapshot_state="available",
+            pack_generation=5,
+            mirror_generation=5,
+            uri="ccc/cold/photos/g0005",
+            archived_at="2026-07-01T00:00:00Z",
+        ),
+    )
+
+    dump_atomic(path, manifest)
+    text = path.read_text()
+    loaded = load_manifest(path)
+
+    assert "[cold_storage]" in text
+    assert "[s3]" not in text
+    assert loaded.cold_storage.pack_state == "cold"
+    assert loaded.s3 == loaded.cold_storage
+
+
+def test_manifest_loads_legacy_s3_table_as_cold_storage(tmp_path):
+    path = tmp_path / "legacy.toml"
+    path.write_text(
+        '\n'.join(
+            [
+                'schema_version = 1',
+                'id = "dataset:legacy"',
+                'name = "legacy"',
+                'type = "dataset"',
+                'generation = 2',
+                '',
+                '[s3]',
+                'pack_state = "cold"',
+                'snapshot_state = "available"',
+                'pack_generation = 2',
+                'uri = "old/s3/prefix"',
+                '',
+            ]
+        )
+    )
+
+    loaded = load_manifest(path)
+
+    assert loaded.cold_storage.backend == "s3"
+    assert loaded.cold_storage.pack_state == "cold"
+    assert loaded.cold_storage.uri == "old/s3/prefix"

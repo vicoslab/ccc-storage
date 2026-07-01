@@ -7,6 +7,7 @@ unprivileged mountd-control operations remain direct commands:
 - `ccc-storage pack ...`
 - `ccc-storage mountd ...`
 - `ccc-storage hpc ...`
+- `ccc-storage cold ...`
 - `ccc-storage conda ...`
 - `ccc-storage mamba ...`
 - `ccc-storage benchmark ...`
@@ -32,6 +33,7 @@ _TOOL_HELP = (
     ("pack", "build, verify, and inspect immutable SquashFS packs"),
     ("mountd", "run the per-node privileged mount/control daemon"),
     ("hpc", "stage external-HPC packsets and import/export deltas"),
+    ("cold", "inspect, archive, and recall cold-storage packs"),
     ("conda", "run the conservative managed-env conda shim"),
     ("mamba", "run the conservative managed-env mamba shim"),
     ("benchmark", "run deterministic small-file write/read benchmarks"),
@@ -41,6 +43,7 @@ _DISPATCH: dict[str, Dispatcher] = {
     "pack": lambda argv: pack_main(argv, prog="ccc-storage pack"),
     "mountd": lambda argv: mountd_main(argv, prog="ccc-storage mountd"),
     "hpc": lambda argv: hpc_main(argv, prog="ccc-storage hpc"),
+    "cold": lambda argv: control_main(["cold", *argv], prog="ccc-storage"),
     "conda": conda_shim.main_conda,
     "mamba": conda_shim.main_mamba,
     "benchmark": lambda argv: bench_cli.main(argv, prog="ccc-storage benchmark"),

@@ -15,6 +15,14 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from ccc_storage_cold.archive import (
+    archive_committed_packs_to_cold_storage,
+    mirror_committed_packs_to_cold_storage,
+    recall_cold_storage_packs,
+)
+from ccc_storage_cold.config import ColdStorageConfig, hot_pack_dir
+from ccc_storage_cold.object_store import ObjectStore
+from ccc_storage_cold.policy import archive_decision, needs_recall
 from ccc_storage_core.locks import LockHeld, NFSLock
 from ccc_storage_core.manifest import (
     VALID_WRITE_POLICIES,
@@ -42,7 +50,6 @@ from ccc_storage_mountd.managed_parent import (
     ManagedParentError,
 )
 from ccc_storage_mountd.observation import ObservationError, ObservationManager
-from ccc_storage_mountd.ownership import Ownership
 from ccc_storage_mountd.overlay import (
     OverlayPaths,
     cleanup_dirty_mirror,
@@ -53,6 +60,7 @@ from ccc_storage_mountd.overlay import (
     local_overlay_paths,
     seal_active_upper,
 )
+from ccc_storage_mountd.ownership import Ownership
 from ccc_storage_mountd.workers.compaction import (
     build_partial_compaction,
     plan_compaction,
@@ -98,12 +106,16 @@ class MountdService:
         level_policy: LevelPolicy | None = None,
         storage_uid: int | None = None,
         storage_gid: int | None = None,
+        cold_config: ColdStorageConfig | None = None,
+        cold_store: ObjectStore | None = None,
     ) -> None:
         self.nfs_root = Path(nfs_root)
         self.run_dir = Path(run_dir)
         self.default_write_policy = normalize_write_policy(default_write_policy)
         self.level_policy = level_policy or LevelPolicy.from_env(os.environ)
         self.ownership = Ownership(uid=storage_uid, gid=storage_gid)
+        self.cold_config = cold_config or ColdStorageConfig.from_env(os.environ)
+        self.cold_store = cold_store or self.cold_config.build_store()
         self.registry_dir = self.nfs_root / "registry"
         self.mounts = ChildMountManager(
             self.run_dir,
@@ -126,6 +138,7 @@ class MountdService:
                 mounts=self.mounts,
                 prefer_kernel=prefer_kernel,
                 ownership=self.ownership,
+                prepare_manifest=self._ensure_hot,
             )
         if observe_root:
             self.observer = ObservationManager(
@@ -134,6 +147,7 @@ class MountdService:
                 self.mounts,
                 default_write_policy=self.default_write_policy,
                 ownership=self.ownership,
+                prepare_manifest=self._ensure_hot,
             )
 
     def reload_registry(self) -> None:
@@ -170,8 +184,73 @@ class MountdService:
     def handle_status(self, selector: str) -> dict[str, Any]:
         return self._manifest_status(self._find(selector))
 
+    def _manifest_path(self, manifest: ChildManifest) -> Path:
+        path = self.manifest_paths.get(manifest.id)
+        if path is not None:
+            return path
+        self.reload_registry()
+        path = self.manifest_paths.get(manifest.id)
+        if path is not None:
+            return path
+        raise MountdError(f"manifest path not found for child {manifest.id}")
+
+    def _write_manifest(self, manifest: ChildManifest) -> None:
+        path = self._manifest_path(manifest)
+        dump_atomic(path, manifest)
+        self.ownership.apply(path)
+
+    def _cold_lock_path(self, manifest: ChildManifest) -> Path:
+        return self.nfs_root / "locks" / f"{_safe_child_name(manifest.id)}.cold.lock"
+
+    def _require_cold_store(self) -> ObjectStore:
+        if self.cold_store is None:
+            raise MountdError(
+                "cold storage backend is not configured; set CCC_COLD_STORAGE_* / CCC_S3_*"
+            )
+        return self.cold_store
+
+    @staticmethod
+    def _cold_timestamp() -> str:
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    def _mark_accessed(self, manifest: ChildManifest) -> ChildManifest:
+        updated = replace(
+            manifest,
+            s3=replace(manifest.cold_storage, last_accessed_at=self._cold_timestamp()),
+        )
+        if updated == manifest:
+            return manifest
+        self._write_manifest(updated)
+        self.reload_registry()
+        return self.children.get(updated.id, updated)
+
+    def _ensure_hot(self, manifest: ChildManifest) -> ChildManifest:
+        """Recall cold pack bytes before a child is mounted/accessed."""
+        if not needs_recall(manifest):
+            return self._mark_accessed(manifest)
+        with NFSLock(self._cold_lock_path(manifest), op="cold-recall"):
+            # Re-read after taking the lock: another node may have recalled it.
+            manifest = self._find(manifest.id)
+            if not needs_recall(manifest):
+                return self._mark_accessed(manifest)
+            store = self._require_cold_store()
+            hot_dir = hot_pack_dir(self.nfs_root, manifest.id)
+            hot_dir.mkdir(parents=True, exist_ok=True)
+            self.ownership.apply(hot_dir)
+            recalled = recall_cold_storage_packs(
+                manifest,
+                self._manifest_path(manifest),
+                store,
+                hot_dir,
+            )
+            for pack in recalled.pack_stack.lowers:
+                self.ownership.apply(pack.path)
+            self.ownership.apply(self._manifest_path(recalled))
+            self.reload_registry()
+            return self.children[recalled.id]
+
     def handle_mount(self, selector: str) -> dict[str, Any]:
-        manifest = self._find(selector)
+        manifest = self._ensure_hot(self._find(selector))
         self.mounts.mount(manifest)
         return self._manifest_status(manifest)
 
@@ -182,11 +261,11 @@ class MountdService:
         manifest is mounted from its own pack stack directly onto the boundary
         directory inside the mounted parent view.
         """
-        parent = self._find(selector)
+        parent = self._ensure_hot(self._find(selector))
         parent_record = self.mounts.mount(parent)
         nested: list[dict[str, Any]] = []
         for boundary in parent.child_boundaries:
-            child = self._find(boundary.child_id)
+            child = self._ensure_hot(self._find(boundary.child_id))
             boundary_path = boundary.path.strip("/")
             boundary_mountpoint = parent_record.mountpoint / boundary_path
             child_record = self.mounts.mount_at(child, boundary_mountpoint)
@@ -351,6 +430,7 @@ class MountdService:
             compacted = self._compact_if_needed(committed, allow_base=False)
             if compacted is not None:
                 committed = compacted
+        committed = self._mirror_after_commit_if_configured(committed)
         committed_status = self._manifest_status(committed)
         committed_status["message"] = message
         return committed_status
@@ -527,6 +607,7 @@ class MountdService:
 
             updated = replace(manifest, write_policy=next_policy)
             dump_atomic(self.manifest_paths[manifest.id], updated)
+            self.ownership.apply(self.manifest_paths[manifest.id])
             self.reload_registry()
             updated = self.children[updated.id]
 
@@ -577,7 +658,9 @@ class MountdService:
         return self._require_observer().list_boundaries()
 
     def handle_observe_mkdir(self, path: str) -> dict[str, Any]:
-        return self._require_observer().mkdir_child(path)
+        status = self._require_observer().mkdir_child(path)
+        self.reload_registry()
+        return status
 
     def handle_observe_access(self, path: str) -> dict[str, Any]:
         return self._require_observer().access_child(path)
@@ -586,10 +669,14 @@ class MountdService:
         return self._require_observer().access_child_at(path, mountpoint)
 
     def handle_observe_rmdir(self, path: str) -> dict[str, Any]:
-        return self._require_observer().rmdir_child(path)
+        status = self._require_observer().rmdir_child(path)
+        self.reload_registry()
+        return status
 
     def handle_observe_rename(self, old_path: str, new_path: str) -> dict[str, Any]:
-        return self._require_observer().rename_child(old_path, new_path)
+        status = self._require_observer().rename_child(old_path, new_path)
+        self.reload_registry()
+        return status
 
     def handle_doctor(self) -> dict[str, Any]:
         self.reload_registry()
@@ -607,6 +694,17 @@ class MountdService:
             "default_write_policy": self.default_write_policy,
             "storage_uid": self.ownership.uid,
             "storage_gid": self.ownership.gid,
+            "cold_storage": {
+                "enabled": self.cold_config.enabled,
+                "configured": self.cold_store is not None,
+                "archive_enabled": self.cold_config.archive_enabled,
+                "backend": self.cold_config.backend,
+                "prefix": self.cold_config.prefix,
+                "idle_seconds": self.cold_config.idle_seconds,
+                "interval_seconds": self.cold_config.interval_seconds,
+                "mirror_after_commit": self.cold_config.mirror_after_commit,
+                "remove_hot": self.cold_config.remove_hot,
+            },
         }
 
     def reap_idle_mounts(self, ttl: float) -> list[str]:
@@ -630,6 +728,130 @@ class MountdService:
             mirror = self.mounts.publish_dirty(manifest.id)
             return {"published": [] if mirror is None else [self._mirror_dict(mirror)]}
         return {"published": self.publish_dirty_epochs()}
+
+    def _cold_prefix(self, manifest: ChildManifest) -> str:
+        return self.cold_config.child_prefix(manifest.id, manifest.generation)
+
+    def _cold_summary(self, manifest: ChildManifest) -> dict[str, Any]:
+        cold = manifest.cold_storage
+        return {
+            "configured": self.cold_store is not None,
+            "enabled": self.cold_config.enabled,
+            "archive_enabled": self.cold_config.archive_enabled,
+            "backend": cold.backend or self.cold_config.backend,
+            "mode": cold.mode,
+            "pack_state": cold.pack_state,
+            "snapshot_state": cold.snapshot_state,
+            "pack_generation": cold.pack_generation,
+            "mirror_generation": cold.mirror_generation,
+            "overlay_generation": cold.overlay_generation,
+            "uri": cold.uri,
+            "archived_at": cold.archived_at,
+            "last_mirrored_at": cold.last_mirrored_at,
+            "last_recalled_at": cold.last_recalled_at,
+            "last_accessed_at": cold.last_accessed_at,
+            "hot_pack_files_present": all(
+                Path(pack.path).is_file() for pack in manifest.pack_stack.lowers
+            ),
+            "needs_recall": needs_recall(manifest),
+        }
+
+    def handle_cold_status(self, selector: str) -> dict[str, Any]:
+        manifest = self._find(selector)
+        return {"id": manifest.id, "cold_storage": self._cold_summary(manifest)}
+
+    def _assert_clean_for_cold_archive(self, manifest: ChildManifest, *, remove_hot: bool) -> None:
+        paths = self.overlay_paths(manifest)
+        ensure_active_upper(paths, self.ownership)
+        stats = dirty_stats(paths.active_upper)
+        if stats.dirty:
+            raise MountdError(f"cannot archive dirty child {manifest.id}; commit or discard first")
+        mount_status = self.mounts.status(manifest)
+        if remove_hot and mount_status.get("mounted"):
+            raise MountdError(f"cannot evict mounted child {manifest.id}; unmount it first")
+
+    def handle_cold_archive(
+        self,
+        selector: str,
+        *,
+        keep_hot: bool = False,
+    ) -> dict[str, Any]:
+        manifest = self._find(selector)
+        remove_hot = not keep_hot
+        with NFSLock(self._cold_lock_path(manifest), op="cold-archive"):
+            manifest = self._find(selector)
+            self._assert_clean_for_cold_archive(manifest, remove_hot=remove_hot)
+            store = self._require_cold_store()
+            prefix = self._cold_prefix(manifest)
+            result = archive_committed_packs_to_cold_storage(
+                manifest,
+                self._manifest_path(manifest),
+                store,
+                prefix=prefix,
+                remove_hot=remove_hot,
+                backend=self.cold_config.backend,
+            )
+            self.ownership.apply(self._manifest_path(result.manifest))
+            self.reload_registry()
+            status = self._manifest_status(self.children[result.manifest.id])
+            status["cold_storage_action"] = "archive" if remove_hot else "mirror"
+            status["cold_storage_uploaded_keys"] = list(result.uploaded_keys)
+            status["cold_storage_removed_hot_paths"] = list(result.removed_hot_paths)
+            return status
+
+    def handle_cold_recall(self, selector: str) -> dict[str, Any]:
+        before = self._find(selector)
+        was_cold = needs_recall(before)
+        manifest = self._ensure_hot(before)
+        status = self._manifest_status(manifest)
+        status["cold_storage_action"] = "recall"
+        status["cold_storage_recalled"] = was_cold
+        return status
+
+    def _mirror_after_commit_if_configured(self, manifest: ChildManifest) -> ChildManifest:
+        if not self.cold_config.mirror_after_commit or self.cold_store is None:
+            return manifest
+        result = mirror_committed_packs_to_cold_storage(
+            manifest,
+            self._manifest_path(manifest),
+            self.cold_store,
+            prefix=self._cold_prefix(manifest),
+            backend=self.cold_config.backend,
+            persist_manifest=True,
+        )
+        self.ownership.apply(self._manifest_path(result.manifest))
+        self.reload_registry()
+        return self.children[result.manifest.id]
+
+    def run_cold_storage_once(self) -> list[dict[str, Any]]:
+        """Run one safe cold-storage archival pass over eligible children."""
+        self.reload_registry()
+        results: list[dict[str, Any]] = []
+        if not self.cold_config.archive_enabled or self.cold_store is None:
+            return results
+        for manifest in sorted(self.children.values(), key=lambda item: item.id):
+            paths = self.overlay_paths(manifest)
+            ensure_active_upper(paths, self.ownership)
+            stats = dirty_stats(paths.active_upper)
+            mount_status = self.mounts.status(manifest)
+            decision = archive_decision(
+                manifest,
+                dirty=stats.dirty,
+                mounted=bool(mount_status.get("mounted")),
+                idle_seconds=self.cold_config.idle_seconds,
+            )
+            if decision.reason == "no-access-metadata":
+                self._mark_accessed(manifest)
+                continue
+            if not decision.eligible:
+                continue
+            result = self.handle_cold_archive(
+                manifest.id,
+                keep_hot=not self.cold_config.remove_hot,
+            )
+            result["cold_storage_idle_age_seconds"] = decision.idle_age_seconds
+            results.append(result)
+        return results
 
     def dispatch(self, request: Request) -> Response:
         try:
@@ -662,6 +884,18 @@ class MountdService:
                 )
             if request.command == "publish":
                 return Response(ok=True, result=self.handle_publish(request.path or None))
+            if request.command == "cold-status":
+                return Response(ok=True, result=self.handle_cold_status(request.path))
+            if request.command == "cold-archive":
+                return Response(
+                    ok=True,
+                    result=self.handle_cold_archive(
+                        request.path,
+                        keep_hot=bool(request.payload.get("keep_hot", False)),
+                    ),
+                )
+            if request.command == "cold-recall":
+                return Response(ok=True, result=self.handle_cold_recall(request.path))
             if request.command == "pin":
                 return Response(
                     ok=True,
@@ -802,6 +1036,7 @@ class MountdService:
             "packs": [pack.to_dict() for pack in manifest.pack_stack.lowers],
             "delta_count": delta_count,
             "overlay": overlay_info,
+            "cold_storage": self._cold_summary(manifest),
             "policy": {
                 "mode": manifest.commit_mode or "auto",
                 "decision": decision,
@@ -934,11 +1169,13 @@ def _serve_forever(
     idle_reap_interval: float = 30.0,
     dirty_publish_interval: float = 1.0,
     compaction_interval: float = 0.0,
+    cold_storage_interval: float = 0.0,
 ) -> int:
     stop = False
     next_reap = time.monotonic() + max(idle_reap_interval, 0.1)
     next_publish = time.monotonic() + max(dirty_publish_interval, 0.1)
     next_compact = time.monotonic() + max(compaction_interval, 0.1)
+    next_cold = time.monotonic() + max(cold_storage_interval, 0.1)
 
     def _handler(signum, frame):  # type: ignore[no-untyped-def]
         nonlocal stop
@@ -964,6 +1201,10 @@ def _serve_forever(
                 with contextlib.suppress(Exception):
                     service.run_background_compaction_once()
                 next_compact = now + max(compaction_interval, 0.1)
+            if cold_storage_interval > 0 and now >= next_cold:
+                with contextlib.suppress(Exception):
+                    service.run_cold_storage_once()
+                next_cold = now + max(cold_storage_interval, 0.1)
             time.sleep(0.2)
     finally:
         with contextlib.suppress(Exception):
@@ -1035,6 +1276,12 @@ def main(argv: list[str] | None = None, *, prog: str = "ccc-storage mountd") -> 
         help="seconds between safe background log-structured compaction passes; <=0 disables",
     )
     parser.add_argument(
+        "--cold-storage-interval",
+        type=float,
+        default=float(os.environ.get("CCC_COLD_STORAGE_INTERVAL_SECONDS", "604800")),
+        help="seconds between automatic cold-storage archival scans; <=0 disables",
+    )
+    parser.add_argument(
         "--storage-uid",
         type=_parse_owner_id,
         default=None,
@@ -1044,7 +1291,10 @@ def main(argv: list[str] | None = None, *, prog: str = "ccc-storage mountd") -> 
         "--storage-gid",
         type=_parse_owner_id,
         default=None,
-        help="GID to own mountd-created shared storage data (env: CCC_STORAGE_GROUP_ID or GROUP_ID)",
+        help=(
+            "GID to own mountd-created shared storage data "
+            "(env: CCC_STORAGE_GROUP_ID or GROUP_ID)"
+        ),
     )
     parser.add_argument(
         "--observe-ready-timeout",
@@ -1153,6 +1403,7 @@ def main(argv: list[str] | None = None, *, prog: str = "ccc-storage mountd") -> 
         idle_reap_interval=ns.idle_reap_interval,
         dirty_publish_interval=ns.dirty_publish_interval,
         compaction_interval=ns.compaction_interval,
+        cold_storage_interval=ns.cold_storage_interval,
     )
 
 

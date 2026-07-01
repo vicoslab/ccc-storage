@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 import shutil
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -94,6 +94,7 @@ class ManagedParent:
         mounts: ChildMountManager | None = None,
         prefer_kernel: bool = False,
         ownership: Ownership | None = None,
+        prepare_manifest: Callable[[ChildManifest], ChildManifest] | None = None,
     ) -> None:
         self.nfs_root = Path(nfs_root)
         self.run_dir = Path(run_dir)
@@ -103,6 +104,7 @@ class ManagedParent:
         self.overlays_root = self.nfs_root / "overlays"
         self.locks_dir = self.nfs_root / "locks"
         self.ownership = ownership or Ownership()
+        self.prepare_manifest = prepare_manifest or (lambda manifest: manifest)
         self.mounts = mounts or ChildMountManager(
             self.run_dir,
             prefer_kernel=prefer_kernel,
@@ -248,7 +250,7 @@ class ManagedParent:
 
     def access_child(self, name: str) -> dict[str, Any]:
         """Lazily mount a child on access and return its status."""
-        manifest = self._load(name)
+        manifest = self.prepare_manifest(self._load(name))
         self.mounts.mount(manifest)
         return self._status(manifest)
 

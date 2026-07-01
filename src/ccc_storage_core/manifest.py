@@ -149,35 +149,70 @@ class OverlayInfo:
 
 
 @dataclass(frozen=True)
-class S3Info:
+class ColdStorageInfo:
+    """Cold-storage state for a child manifest.
+
+    ``backend`` is currently ``s3`` for real deployments, but the manifest table
+    is intentionally named ``cold_storage`` so S3 remains just one backend. The
+    ``S3Info`` alias below keeps old Python callers/tests source-compatible.
+    """
+
+    backend: str = "s3"
+    mode: str = ""
     pack_state: str = "missing"
     snapshot_state: str = "unavailable"
     pack_generation: int = 0
+    mirror_generation: int = 0
     overlay_generation: int = 0
     uri: str = ""
+    archived_at: str = ""
+    last_mirrored_at: str = ""
+    last_recalled_at: str = ""
+    last_accessed_at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
+            "backend": self.backend,
             "pack_state": self.pack_state,
             "snapshot_state": self.snapshot_state,
             "pack_generation": self.pack_generation,
+            "mirror_generation": self.mirror_generation,
             "overlay_generation": self.overlay_generation,
         }
-        if self.uri:
-            data["uri"] = self.uri
+        optional = {
+            "mode": self.mode,
+            "uri": self.uri,
+            "archived_at": self.archived_at,
+            "last_mirrored_at": self.last_mirrored_at,
+            "last_recalled_at": self.last_recalled_at,
+            "last_accessed_at": self.last_accessed_at,
+        }
+        for key, value in optional.items():
+            if value:
+                data[key] = value
         return data
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> S3Info:
+    def from_dict(cls, data: dict[str, Any] | None) -> ColdStorageInfo:
         if not data:
             return cls()
         return cls(
+            backend=str(data.get("backend", "s3")),
+            mode=str(data.get("mode", "")),
             pack_state=str(data.get("pack_state", "missing")),
             snapshot_state=str(data.get("snapshot_state", "unavailable")),
             pack_generation=int(data.get("pack_generation", 0)),
+            mirror_generation=int(data.get("mirror_generation", data.get("pack_generation", 0))),
             overlay_generation=int(data.get("overlay_generation", 0)),
             uri=str(data.get("uri", "")),
+            archived_at=str(data.get("archived_at", "")),
+            last_mirrored_at=str(data.get("last_mirrored_at", "")),
+            last_recalled_at=str(data.get("last_recalled_at", "")),
+            last_accessed_at=str(data.get("last_accessed_at", "")),
         )
+
+
+S3Info = ColdStorageInfo
 
 
 @dataclass(frozen=True)
@@ -221,8 +256,14 @@ class ChildManifest:
     write_policy: str = WRITE_POLICY_SHARED_NFS
     pack_stack: PackStack = field(default_factory=PackStack)
     overlay: OverlayInfo = field(default_factory=OverlayInfo)
-    s3: S3Info = field(default_factory=S3Info)
+    # Compatibility field name for older Python callers. New code should use
+    # ``manifest.cold_storage`` and manifests serialize this as [cold_storage].
+    s3: ColdStorageInfo = field(default_factory=ColdStorageInfo)
     child_boundaries: tuple[ChildBoundary, ...] = ()
+
+    @property
+    def cold_storage(self) -> ColdStorageInfo:
+        return self.s3
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
@@ -248,7 +289,7 @@ class ChildManifest:
             data["write_policy"] = write_policy
         data["pack_stack"] = self.pack_stack.to_dict()
         data["overlay"] = self.overlay.to_dict()
-        data["s3"] = self.s3.to_dict()
+        data["cold_storage"] = self.cold_storage.to_dict()
         if self.child_boundaries:
             data["child_boundary"] = [boundary.to_dict() for boundary in self.child_boundaries]
         return data
@@ -280,7 +321,7 @@ class ChildManifest:
             ),
             pack_stack=PackStack.from_dict(data.get("pack_stack")),
             overlay=OverlayInfo.from_dict(data.get("overlay")),
-            s3=S3Info.from_dict(data.get("s3")),
+            s3=ColdStorageInfo.from_dict(data.get("cold_storage") or data.get("s3")),
             child_boundaries=tuple(ChildBoundary.from_dict(item) for item in boundaries_raw),
         )
 
@@ -374,7 +415,7 @@ def _dumps_toml_subset(data: dict[str, Any]) -> str:
             lines.append(f"{key} = {_scalar(data[key])}")
     lines.append("")
 
-    for table in ("pack_stack", "overlay", "s3"):
+    for table in ("pack_stack", "overlay", "cold_storage"):
         if table not in data:
             continue
         _emit_scalar_table(lines, table, data[table])

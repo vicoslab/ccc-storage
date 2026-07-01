@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ccc_storage_cold.object_store import LocalObjectStore
 from ccc_storage_hpc.hpc_s3_exchange import (
     fetch_hpc_packset_bundle,
     import_hpc_delta_from_s3,
@@ -7,7 +8,6 @@ from ccc_storage_hpc.hpc_s3_exchange import (
     publish_hpc_packset_bundle,
 )
 from ccc_storage_hpc.importqueue import ImportQueue, Provenance
-from ccc_storage_hpc.object_store import LocalObjectStore
 from ccc_storage_pack.bundle import (
     BundleEntry,
     MountGraph,

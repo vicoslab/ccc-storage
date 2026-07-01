@@ -91,8 +91,8 @@ from pathlib import Path
 
 from ccc_storage_core.checksum import sha256_file
 from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack, S3Info, dump_atomic, load_manifest
-from ccc_storage_hpc.object_store import Boto3ObjectStore, ObjectStoreError
-from ccc_storage_hpc.s3mirror import RecallError, mirror_committed_packs, recall_cold_pack
+from ccc_storage_cold.archive import RecallError, mirror_committed_packs, recall_cold_pack
+from ccc_storage_cold.object_store import Boto3ObjectStore, ObjectStoreError
 
 endpoint, addressing_style, region, bucket_arg, prefix, work_root_arg = sys.argv[1:]
 work_root = Path(work_root_arg)
