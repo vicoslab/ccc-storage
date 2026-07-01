@@ -53,12 +53,13 @@ for a complete template.
 docker build -f deploy/docker/mountd.Dockerfile -t ccc-storage-mountd:local .
 ```
 
-GitHub Actions uses this same Dockerfile for development build validation.  On a
-release tag matching `v<digits>.<digits>` (for example `v1.0` or `v0.01`), it
-logs in to Docker Hub and publishes `vicoslab/ccc-storage:<tag>` plus
-`vicoslab/ccc-storage:latest`.  This image is the mountd service image only;
-client/user CLI tools are installed separately into client containers with
-`pip`.
+GitHub Actions uses this same Dockerfile for CI build validation without pushing
+an image. The manual dev Docker workflow logs in to Docker Hub and publishes
+`vicoslab/ccc-storage:dev`. On a release tag matching `v<digits>.<digits>` (for
+example `v1.0` or `v0.01`), the release workflow publishes
+`vicoslab/ccc-storage:<tag>` plus updates `vicoslab/ccc-storage:latest`. This
+image is the mountd service image only; client/user CLI tools are installed
+separately into client containers with `pip`.
 
 ## Development smoke topology
 

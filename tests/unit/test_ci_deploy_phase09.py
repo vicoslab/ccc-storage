@@ -31,12 +31,22 @@ def test_mountd_docker_workflows_target_docker_hub_and_mountd_image_only():
     assert "secrets.DOCKERHUB_USERNAME" in release_text
     assert "secrets.DOCKERHUB_TOKEN" in release_text
 
-    assert "pull_request:" in dev_text
-    assert "push: false" in dev_text
+    assert "workflow_dispatch:" in dev_text
+    assert "\n  push:\n" not in dev_text
+    assert "pull_request:" not in dev_text
+    assert "vicoslab/ccc-storage:dev" in dev_text
+    assert "push: true" in dev_text
+    assert "docker/login-action@v3" in dev_text
+    assert "secrets.DOCKERHUB_USERNAME" in dev_text
+    assert "secrets.DOCKERHUB_TOKEN" in dev_text
+    assert "vicoslab/ccc-storage:latest" not in dev_text
+    assert "type=raw,value=latest" not in dev_text
 
     ci_text = CI.read_text()
     assert "docker build -f deploy/docker/mountd.Dockerfile -t ccc-storage-mountd:ci ." in ci_text
     assert "docker build -f dev/docker/test.Dockerfile" not in ci_text
+    assert "docker/login-action" not in ci_text
+    assert "docker push" not in ci_text
 
 
 def test_ci_workflow_has_always_on_and_conditional_lanes():
