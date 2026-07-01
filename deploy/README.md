@@ -39,13 +39,13 @@ uses `deploy/docker/mountd-entrypoint.sh`, and exposes a mountd health check. It
 is separate from `dev/docker/test.Dockerfile`, which is a development/test
 image.
 
-CI validates this mountd image without pushing it. The manual dev Docker
-workflow pushes `vicoslab/ccc-storage:dev`. Tags matching `v<digits>.<digits>`
-(for example `v1.0` or `v0.01`) are pushed to Docker Hub as
-`vicoslab/ccc-storage:<tag>` and update `vicoslab/ccc-storage:latest`. These
-workflows publish the mountd image, not a client CLI image. Client containers
-should install the user-facing `ccc-storage` CLI with `pip` when that integration
-is added.
+CI runs tests but does not build or push Docker images. The manual dev Docker
+workflow builds this Dockerfile and pushes `vicoslab/ccc-storage:dev`. Tags
+matching `v<digits>.<digits>` (for example `v1.0` or `v0.01`) are pushed to
+Docker Hub as `vicoslab/ccc-storage:<tag>` and update
+`vicoslab/ccc-storage:latest`. These workflows publish the mountd image, not a
+client CLI image. Client containers should install the user-facing `ccc-storage`
+CLI with `pip` when that integration is added.
 
 ## Systemd unit
 

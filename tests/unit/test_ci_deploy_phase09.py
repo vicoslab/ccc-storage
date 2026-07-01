@@ -43,7 +43,7 @@ def test_mountd_docker_workflows_target_docker_hub_and_mountd_image_only():
     assert "type=raw,value=latest" not in dev_text
 
     ci_text = CI.read_text()
-    assert "docker build -f deploy/docker/mountd.Dockerfile -t ccc-storage-mountd:ci ." in ci_text
+    assert "docker build" not in ci_text
     assert "docker build -f dev/docker/test.Dockerfile" not in ci_text
     assert "docker/login-action" not in ci_text
     assert "docker push" not in ci_text
@@ -54,8 +54,9 @@ def test_ci_workflow_has_always_on_and_conditional_lanes():
 
     for job in ("lint:", "unit:", "fuse-unpriv:", "multinode:", "bench-smoke:"):
         assert job in text
-    for job in ("kernel-mount:", "docker-propagation:", "real-s3:"):
+    for job in ("kernel-mount:", "real-s3:"):
         assert job in text
+    assert "docker-propagation:" not in text
     assert "continue-on-error: true" in text
     assert "skip with reason" in text.lower()
     assert "CCC_TEST_ROOT" in text

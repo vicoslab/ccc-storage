@@ -157,24 +157,6 @@ jobs:
           fi
           python -m pytest tests/fuse -q -m kernel_mount
 
-  docker-propagation:
-    name: conditional Docker propagation lane
-    runs-on: ubuntu-latest
-    needs: [lint, unit]
-    continue-on-error: true
-    timeout-minutes: 15
-    env:
-      CCC_TEST_ROOT: ${{ github.workspace }}/.scratch/ci-docker
-    steps:
-      - uses: actions/checkout@v4
-      - name: Docker lane or skip with reason
-        run: |
-          if ! docker info >/dev/null 2>&1; then
-            echo 'skip with reason: Docker daemon unavailable'
-            exit 0
-          fi
-          docker build -f deploy/docker/mountd.Dockerfile -t ccc-storage-mountd:ci .
-
   real-s3:
     name: conditional real-S3 lane
     runs-on: ubuntu-latest

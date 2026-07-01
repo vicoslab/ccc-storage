@@ -37,11 +37,11 @@ Production mountd image:
 docker build -f deploy/docker/mountd.Dockerfile -t ccc-storage-mountd:local .
 ```
 
-CI builds the same `deploy/docker/mountd.Dockerfile` for validation, but CI does
-not push images.  The manual dev Docker workflow publishes the mountd image to
-Docker Hub as `vicoslab/ccc-storage:dev`.  Pushing a release tag matching
+CI runs tests but does not build or push Docker images. The manual dev Docker
+workflow builds `deploy/docker/mountd.Dockerfile` and publishes the mountd image
+to Docker Hub as `vicoslab/ccc-storage:dev`. Pushing a release tag matching
 `v<digits>.<digits>` (for example `v1.0` or `v0.01`) publishes
-`vicoslab/ccc-storage:<tag>` and updates `vicoslab/ccc-storage:latest`.  The
+`vicoslab/ccc-storage:<tag>` and updates `vicoslab/ccc-storage:latest`. The
 published Docker image is intentionally the mountd service image only;
 user-facing CLI tools are installed into client containers with `pip`.
 
