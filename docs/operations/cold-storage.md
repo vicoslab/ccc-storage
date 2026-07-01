@@ -96,7 +96,29 @@ of immediately evicting old data.
 
 ## Configuration
 
-Mountd reads cold-storage configuration from environment variables:
+Cold-storage policy is preferably configured on mountd through the TOML config
+file (see `configuration.md`):
+
+```toml
+[cold_storage]
+backend = "s3"
+enabled = true
+archive_enabled = true
+prefix = "ccc-storage/cold"
+interval_seconds = 604800      # one week
+idle_seconds = 15552000        # 180 days
+remove_hot = true              # archive evicts by default
+mirror_after_commit = false
+
+[cold_storage.s3]
+bucket = "my-bucket"
+endpoint_url = "https://s3.example"
+region_name = "us-east-1"
+addressing_style = "auto"
+```
+
+Environment variables are still supported as deployment overrides and for
+legacy setups:
 
 ```bash
 # Generic cold-storage controls

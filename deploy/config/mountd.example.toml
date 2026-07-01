@@ -1,0 +1,73 @@
+# Example mountd-owned CCC storage configuration.
+#
+# Install as /etc/ccc-storage/mountd.toml (or pass with
+# `ccc-storage mountd --config /path/to/mountd.toml`).  The unprivileged
+# `ccc-storage` client normally needs only the mountd socket path; policy,
+# retention, cold-storage, and S3 settings belong on mountd.
+#
+# Precedence: built-in defaults < this TOML file < CCC_* environment variables
+# < explicit `ccc-storage mountd ...` flags.
+
+[paths]
+# Shared NFS-backed CCC storage state. This is mountd state, not a client cache.
+nfs_root = "/storage/.ccc-storage"
+run_dir = "/run/ccc-storage"
+socket = "/run/ccc-storage/mountd.sock"
+ready_file = "/run/ccc-storage/ready.json"
+
+# One of these operating modes is typically configured by deployment:
+# managed_parent = "/managed/datasets"
+observe_root = "/storage/user/layered-source"
+observe_mountpoint = "/storage/user/layered"
+
+# Node-local scratch for local-ssd-async write policy.
+local_overlay_root = "/run/ccc-storage/local-overlays"
+
+[runtime]
+prefer_kernel = false
+socket_mode = "0600"
+observe_ready_timeout = 10
+
+[defaults]
+write_policy = "shared-nfs"  # or "local-ssd-async"
+
+[maintenance]
+idle_unmount_ttl = 300
+idle_reap_interval = 30
+dirty_publish_interval = 1
+
+[ownership]
+# CCC development validation uses 2094:2094.  Production should set the UID/GID
+# that client containers use to access mountd-created shared state.  Omit both
+# keys to preserve the mountd process owner.
+# uid = 2094
+# gid = 2094
+
+[compaction]
+interval_seconds = 0  # <=0 disables periodic background compaction
+levels = "0:100G,1:10G,2:1G,3:100M,4:10M"
+max_packs_per_level = 1
+allow_base = false
+after_commit = true
+max_online_bytes = "10G"
+
+[cold_storage]
+# Keep this subsystem named cold_storage even though S3 is currently the only
+# backend.  That keeps future backends additive and avoids leaking S3 vocabulary
+# into mountd policy.
+backend = "s3"
+enabled = false
+archive_enabled = false
+prefix = "ccc-storage/cold"
+mirror_after_commit = false
+remove_hot = true
+idle_seconds = 15552000      # 180 days
+interval_seconds = 604800    # one week; <=0 disables the automatic scan
+
+[cold_storage.s3]
+# Boto3 still reads credentials from normal AWS_* env vars, profiles, instance
+# roles, or mounted secret files.  Do not commit access keys to this TOML file.
+bucket = ""
+endpoint_url = ""
+region_name = "us-east-1"
+addressing_style = "auto"

@@ -94,10 +94,12 @@ def test_mountd_docker_artifacts_are_dedicated_service_container():
     root = Path(__file__).resolve().parents[2]
     dockerfile = root / "deploy" / "docker" / "mountd.Dockerfile"
     entrypoint = root / "deploy" / "docker" / "mountd-entrypoint.sh"
+    example_config = root / "deploy" / "config" / "mountd.example.toml"
     smoke = root / "dev" / "validation" / "docker" / "mountd-container-runtime-smoke.sh"
 
     assert dockerfile.exists()
     assert entrypoint.exists()
+    assert example_config.exists()
     assert smoke.exists()
 
     docker_text = dockerfile.read_text()
@@ -109,6 +111,8 @@ def test_mountd_docker_artifacts_are_dedicated_service_container():
     assert "tini" in docker_text
 
     entry_text = entrypoint.read_text()
+    assert "CCC_STORAGE_MOUNTD_CONFIG" in entry_text
+    assert "--config" in entry_text
     for var in ("CCC_NFS_ROOT", "CCC_OBSERVE_ROOT", "CCC_OBSERVE_MOUNTPOINT"):
         assert var in entry_text
     assert "exec ccc-storage mountd" in entry_text
@@ -259,7 +263,12 @@ def test_mountd_loop_runs_background_compaction_interval(monkeypatch):
 
 def test_mountd_cli_exposes_production_safety_flags():
     text = Path(daemon.__file__).read_text()
+    from ccc_storage_mountd import config as mountd_config
+
+    config_text = Path(mountd_config.__file__).read_text()
+    combined_text = text + "\n" + config_text
     for flag in (
+        "--config",
         "--socket-mode",
         "--prefer-kernel",
         "--observe-ready-timeout",
@@ -271,9 +280,10 @@ def test_mountd_cli_exposes_production_safety_flags():
         "--storage-gid",
     ):
         assert flag in text
-    assert "CCC_COMPACT_INTERVAL_SECONDS" in text
-    assert "CCC_STORAGE_USER_ID" in text
-    assert "CCC_STORAGE_GROUP_ID" in text
-    assert "USER_ID" in text
-    assert "GROUP_ID" in text
+    assert "CCC_STORAGE_MOUNTD_CONFIG" in combined_text
+    assert "CCC_COMPACT_INTERVAL_SECONDS" in combined_text
+    assert "CCC_STORAGE_USER_ID" in combined_text
+    assert "CCC_STORAGE_GROUP_ID" in combined_text
+    assert "USER_ID" in combined_text
+    assert "GROUP_ID" in combined_text
     assert "run_background_compaction_once" in text

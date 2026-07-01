@@ -72,8 +72,8 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
     assert "Restart=on-failure" in service_text
     assert "CAP_SYS_ADMIN" in service_text
     assert "/dev/fuse" in service_text
-    assert "CCC_NFS_ROOT" in service_text
-    assert "CCC_MANAGED_PARENT" in service_text
+    assert "CCC_STORAGE_MOUNTD_CONFIG" in service_text
+    assert "/etc/ccc-storage/mountd.toml" in service_text
     assert "CCC_MANAGED_PARENTS" not in service_text
 
     install_text = install.read_text()

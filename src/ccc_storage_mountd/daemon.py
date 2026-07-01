@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import signal
+import sys
 import threading
 import time
 import traceback
@@ -40,6 +41,7 @@ from ccc_storage_core.names import safe_namespace_name
 from ccc_storage_core.protocol import Request, Response
 from ccc_storage_mountd import __version__
 from ccc_storage_mountd.childmount import ChildMountError, ChildMountManager
+from ccc_storage_mountd.config import CONFIG_ENV_VAR, ConfigError, MountdConfig
 from ccc_storage_mountd.control import ControlServer
 from ccc_storage_mountd.dispatcher_fuse import mount_observation_dispatcher
 from ccc_storage_mountd.managed_parent import (
@@ -1217,80 +1219,110 @@ def _serve_forever(
 
 
 def main(argv: list[str] | None = None, *, prog: str = "ccc-storage mountd") -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if "--version" in args:
+        print(f"{prog} {__version__}")
+        raise SystemExit(0)
+    if "--probe" in args:
+        print("\n".join(_probe_summary()))
+        return 0
+    help_requested = any(arg in {"-h", "--help"} for arg in args)
+    config_arg = ""
+    if help_requested:
+        mountd_config = MountdConfig()
+    else:
+        pre_parser = argparse.ArgumentParser(add_help=False)
+        pre_parser.add_argument("--config", default="")
+        pre_ns, _unknown = pre_parser.parse_known_args(args)
+        config_arg = pre_ns.config or os.environ.get(CONFIG_ENV_VAR, "")
+        try:
+            mountd_config = MountdConfig.load(pre_ns.config or None)
+        except ConfigError as exc:
+            print(f"{prog}: {exc}")
+            return 2
+
     parser = argparse.ArgumentParser(
         prog=prog,
         description="Per-node CCC storage daemon.",
     )
     parser.add_argument("--version", action="version", version=f"{prog} {__version__}")
+    parser.add_argument(
+        "--config",
+        default=config_arg,
+        help=(
+            "mountd TOML config path; defaults to $CCC_STORAGE_MOUNTD_CONFIG "
+            "or /etc/ccc-storage/mountd.toml when present"
+        ),
+    )
     parser.add_argument("--probe", action="store_true", help="print runtime-ingredient summary")
-    parser.add_argument("--nfs-root", default=os.environ.get("CCC_NFS_ROOT", ""))
-    parser.add_argument("--run-dir", default=os.environ.get("CCC_NODE_RUN_DIR", "/run/ccc-storage"))
-    parser.add_argument("--socket", default=os.environ.get("CCC_MOUNTD_SOCK", ""))
+    parser.add_argument("--nfs-root", default=mountd_config.nfs_root)
+    parser.add_argument("--run-dir", default=mountd_config.run_dir)
+    parser.add_argument("--socket", default=mountd_config.socket)
     parser.add_argument(
         "--prefer-kernel",
-        action="store_true",
-        default=os.environ.get("CCC_PREFER_KERNEL", "").lower() in {"1", "true", "yes", "on"},
+        action=argparse.BooleanOptionalAction,
+        default=mountd_config.prefer_kernel,
         help="prefer kernel mount(2) helpers over FUSE helpers where supported",
     )
     parser.add_argument(
         "--socket-mode",
-        default=os.environ.get("CCC_MOUNTD_SOCKET_MODE", "0600"),
+        default=mountd_config.socket_mode,
         help="octal permissions for the control socket (default: 0600)",
     )
     parser.add_argument(
         "--managed-parent",
-        default=os.environ.get("CCC_MANAGED_PARENT", ""),
+        default=mountd_config.managed_parent,
         help="managed parent path whose children this node serves (e.g. /managed/dataset)",
     )
     parser.add_argument(
         "--observe-root",
-        default=os.environ.get("CCC_OBSERVE_ROOT", ""),
+        default=mountd_config.observe_root,
         help="source tree whose CCC_STORAGE_OBSERVE markers define observed children",
     )
     parser.add_argument(
         "--observe-mountpoint",
-        default=os.environ.get("CCC_OBSERVE_MOUNTPOINT", ""),
+        default=mountd_config.observe_mountpoint,
         help="mount a live pyfuse3 observation dispatcher at this path",
     )
     parser.add_argument(
         "--default-write-policy",
-        default=os.environ.get("CCC_DEFAULT_WRITE_POLICY", WRITE_POLICY_SHARED_NFS),
+        default=mountd_config.default_write_policy,
         choices=sorted(VALID_WRITE_POLICIES),
         help="write policy for new children when observe marker has no explicit policy",
     )
     parser.add_argument(
         "--local-overlay-root",
-        default=os.environ.get("CCC_LOCAL_OVERLAY_ROOT", ""),
+        default=mountd_config.local_overlay_root,
         help="node-local SSD root for local-ssd-async upper/work dirs",
     )
     parser.add_argument(
         "--dirty-publish-interval",
         type=float,
-        default=float(os.environ.get("CCC_DIRTY_PUBLISH_INTERVAL", "1")),
+        default=mountd_config.dirty_publish_interval,
         help="seconds between best-effort local-ssd-async dirty mirror publishes",
     )
     parser.add_argument(
         "--compaction-interval",
         type=float,
-        default=float(os.environ.get("CCC_COMPACT_INTERVAL_SECONDS", "0")),
+        default=mountd_config.compaction_interval,
         help="seconds between safe background log-structured compaction passes; <=0 disables",
     )
     parser.add_argument(
         "--cold-storage-interval",
         type=float,
-        default=float(os.environ.get("CCC_COLD_STORAGE_INTERVAL_SECONDS", "604800")),
+        default=mountd_config.cold_storage.interval_seconds,
         help="seconds between automatic cold-storage archival scans; <=0 disables",
     )
     parser.add_argument(
         "--storage-uid",
         type=_parse_owner_id,
-        default=None,
+        default=mountd_config.storage_uid,
         help="UID to own mountd-created shared storage data (env: CCC_STORAGE_USER_ID or USER_ID)",
     )
     parser.add_argument(
         "--storage-gid",
         type=_parse_owner_id,
-        default=None,
+        default=mountd_config.storage_gid,
         help=(
             "GID to own mountd-created shared storage data "
             "(env: CCC_STORAGE_GROUP_ID or GROUP_ID)"
@@ -1299,42 +1331,60 @@ def main(argv: list[str] | None = None, *, prog: str = "ccc-storage mountd") -> 
     parser.add_argument(
         "--observe-ready-timeout",
         type=float,
-        default=float(os.environ.get("CCC_OBSERVE_READY_TIMEOUT", "10")),
+        default=mountd_config.observe_ready_timeout,
         help="seconds to wait for --observe-mountpoint before serving",
     )
     parser.add_argument(
         "--ready-file",
-        default=os.environ.get("CCC_MOUNTD_READY_FILE", ""),
+        default=mountd_config.ready_file,
         help="write doctor JSON here once the socket is accepting requests",
     )
     parser.add_argument(
         "--idle-unmount-ttl",
         type=float,
-        default=float(os.environ.get("CCC_IDLE_UNMOUNT_TTL", "300")),
+        default=mountd_config.idle_unmount_ttl,
         help="seconds before idle refcount-zero child mounts are unmounted; <=0 disables",
     )
     parser.add_argument(
         "--idle-reap-interval",
         type=float,
-        default=float(os.environ.get("CCC_IDLE_REAP_INTERVAL", "30")),
+        default=mountd_config.idle_reap_interval,
         help="seconds between idle-mount cleanup passes",
     )
     parser.add_argument("--once-doctor", action="store_true", help="print doctor JSON and exit")
-    ns = parser.parse_args(argv)
+    ns = parser.parse_args(args)
+
+    effective_config = replace(
+        mountd_config,
+        nfs_root=ns.nfs_root,
+        run_dir=ns.run_dir,
+        socket=ns.socket,
+        ready_file=ns.ready_file,
+        managed_parent=ns.managed_parent,
+        observe_root=ns.observe_root,
+        observe_mountpoint=ns.observe_mountpoint,
+        local_overlay_root=ns.local_overlay_root,
+        prefer_kernel=bool(ns.prefer_kernel),
+        socket_mode=ns.socket_mode,
+        observe_ready_timeout=ns.observe_ready_timeout,
+        default_write_policy=ns.default_write_policy,
+        idle_unmount_ttl=ns.idle_unmount_ttl,
+        idle_reap_interval=ns.idle_reap_interval,
+        dirty_publish_interval=ns.dirty_publish_interval,
+        storage_uid=ns.storage_uid,
+        storage_gid=ns.storage_gid,
+        compaction_interval=ns.compaction_interval,
+        cold_storage=replace(
+            mountd_config.cold_storage,
+            interval_seconds=ns.cold_storage_interval,
+        ),
+    )
 
     if ns.probe:
         print("\n".join(_probe_summary()))
         return 0
     if not ns.nfs_root:
-        print(f"{prog}: --nfs-root or $CCC_NFS_ROOT is required")
-        return 2
-    try:
-        if ns.storage_uid is None:
-            ns.storage_uid = _env_owner_id("CCC_STORAGE_USER_ID", "USER_ID")
-        if ns.storage_gid is None:
-            ns.storage_gid = _env_owner_id("CCC_STORAGE_GROUP_ID", "GROUP_ID")
-    except argparse.ArgumentTypeError as exc:
-        print(f"{prog}: {exc}")
+        print(f"{prog}: --nfs-root, $CCC_NFS_ROOT, or mountd config paths.nfs_root is required")
         return 2
     if (ns.storage_uid is None) != (ns.storage_gid is None):
         print(
@@ -1352,8 +1402,10 @@ def main(argv: list[str] | None = None, *, prog: str = "ccc-storage mountd") -> 
         observe_mountpoint=ns.observe_mountpoint or None,
         default_write_policy=ns.default_write_policy,
         local_overlay_root=ns.local_overlay_root or None,
+        level_policy=effective_config.level_policy(),
         storage_uid=ns.storage_uid,
         storage_gid=ns.storage_gid,
+        cold_config=effective_config.cold_storage,
     )
     service.reload_registry()
     if ns.observe_mountpoint:

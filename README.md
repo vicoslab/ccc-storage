@@ -88,6 +88,7 @@ managed layered env. If mountd/shared state is absent, normal conda still works.
 ## More details
 
 - Deployment artifacts: `deploy/README.md`
+- Mountd configuration: `docs/operations/configuration.md`
 - CLI tools reference: `docs/operations/cli-tools.md`
 - Cold storage operation and design: `docs/operations/cold-storage.md`
 - Mountd container operation: `docs/operations/mountd-container.md`

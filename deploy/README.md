@@ -8,6 +8,8 @@ smoke scripts live under `dev/`.
 
 ```text
 deploy/
+  config/
+    mountd.example.toml        # operator-facing mountd TOML configuration example
   docker/
     mountd.Dockerfile          # dedicated ccc-storage mountd service image
     mountd-entrypoint.sh       # entrypoint used by the mountd image
@@ -16,6 +18,13 @@ deploy/
     install.sh                 # copy/reload helper; does not enable/start
     uninstall.sh               # remove/reload helper
 ```
+
+## Configuration
+
+Use `deploy/config/mountd.example.toml` as the template for
+`/etc/ccc-storage/mountd.toml`.  Mountd owns this configuration; unprivileged
+client containers should normally interact through the socket and should not need
+S3, retention, compaction, or mount policy settings.
 
 ## Docker image
 

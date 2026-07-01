@@ -24,6 +24,29 @@ App containers:
 - do not get `/dev/fuse` for layered storage
 - only need `/home` and `/storage` binds with at least `rslave` propagation
 
+## Configuration
+
+Preferred deployments put mountd settings in a TOML file such as
+`/etc/ccc-storage/mountd.toml`:
+
+```bash
+install -D -m 0640 deploy/config/mountd.example.toml /etc/ccc-storage/mountd.toml
+$EDITOR /etc/ccc-storage/mountd.toml
+ccc-storage mountd --config /etc/ccc-storage/mountd.toml
+```
+
+The file is mountd-owned.  App/client containers should not need S3 credentials,
+retention windows, write-policy defaults, or compaction settings; they pass
+operations to mountd over the socket.  Environment variables and explicit CLI
+flags still work as deployment overrides, with this precedence:
+
+```text
+built-in defaults < TOML config < CCC_* environment < explicit mountd flags
+```
+
+See `configuration.md` for the section layout and `deploy/config/mountd.example.toml`
+for a complete template.
+
 ## Build image
 
 ```bash
@@ -54,8 +77,9 @@ published layered folder, commits, remounts, and reads the committed data. See
 - `--idle-reap-interval 30`: cleanup interval.
 - `--compaction-interval 3600`: optional background log-structured compaction scan.
 - `--cold-storage-interval 604800`: optional automatic cold-storage archival scan;
-  `<=0` disables the scan. Cold-storage backend settings come from
-  `CCC_COLD_STORAGE_*`/`CCC_S3_*` environment variables.
+  `<=0` disables the scan. Prefer `[cold_storage] interval_seconds` in the
+  mountd TOML config for deployments; `CCC_COLD_STORAGE_*`/`CCC_S3_*`
+  environment variables remain supported as overrides.
 - `--storage-uid` / `--storage-gid`: owner forced for mountd-created shared
   state and committed SquashFS metadata. The container entrypoint reads
   `CCC_STORAGE_USER_ID`/`CCC_STORAGE_GROUP_ID` first, then `USER_ID`/`GROUP_ID`.
