@@ -7,10 +7,12 @@ Phase-00 CLIs do no mounting/packing/NFS mutation. We assert they exit 0, that
 
 from __future__ import annotations
 
-import pytest
 import tomllib
 from pathlib import Path
 
+import pytest
+
+from ccc_storage.main import main as storage_main
 from ccc_storage_cli import __version__ as cli_version
 from ccc_storage_cli.main import main as cli_main
 from ccc_storage_hpc import __version__ as hpc_version
@@ -19,7 +21,6 @@ from ccc_storage_mountd import __version__ as mountd_version
 from ccc_storage_mountd.daemon import main as mountd_main
 from ccc_storage_pack import __version__ as pack_version
 from ccc_storage_pack.cli import main as pack_main
-from ccc_storage.main import main as storage_main
 
 ROOT = Path(__file__).resolve().parents[2]
 

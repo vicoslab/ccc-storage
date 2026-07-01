@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from ccc_storage.main import main as storage_main
 from ccc_storage_cli.main import main as layered_main
 from ccc_storage_hpc.client import main as hpc_main
 from ccc_storage_mountd.daemon import main as mountd_main
 from ccc_storage_pack.cli import main as pack_main
-from ccc_storage.main import main as storage_main
 
 
 @pytest.mark.parametrize(

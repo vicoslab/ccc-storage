@@ -22,6 +22,7 @@ from ccc_storage_core.manifest import (
     WRITE_POLICY_SHARED_NFS,
     ChildManifest,
     OverlayInfo,
+    PackInfo,
     PackStack,
     dump_atomic,
     load_manifest,
@@ -367,7 +368,7 @@ class MountdService:
         self,
         manifest: ChildManifest,
         target_level: int,
-        selected: tuple[object, ...],
+        selected: tuple[PackInfo, ...],
     ) -> Path:
         mins = [
             getattr(pack, "generation_min", 0)

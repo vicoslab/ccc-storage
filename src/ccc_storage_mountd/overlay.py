@@ -13,6 +13,7 @@ import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from ccc_storage_core.manifest import ChildManifest
 from ccc_storage_core.names import safe_namespace_name
@@ -24,6 +25,10 @@ class OverlayPaths:
     root: Path
     active_upper: Path
     sealed_dir: Path
+
+    @property
+    def work(self) -> Path:
+        return self.root / "work"
 
     @classmethod
     def for_child(cls, overlays_root: str | Path, child_id: str) -> OverlayPaths:
@@ -173,7 +178,7 @@ def dirty_mirror_paths(nfs_root: str | Path, child_id: str) -> DirtyMirrorPaths:
     return DirtyMirrorPaths.for_child(nfs_root, child_id)
 
 
-def _read_publish_json(paths: DirtyMirrorPaths) -> dict[str, object] | None:
+def _read_publish_json(paths: DirtyMirrorPaths) -> dict[str, Any] | None:
     try:
         return json.loads(paths.publish_json.read_text(encoding="utf-8"))
     except FileNotFoundError:

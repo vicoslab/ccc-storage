@@ -20,7 +20,8 @@ from collections.abc import Callable
 
 from ccc_storage_bench import perf as bench_cli
 from ccc_storage_cli import __version__, conda_shim
-from ccc_storage_cli.main import CONTROL_COMMANDS, main as control_main
+from ccc_storage_cli.main import CONTROL_COMMANDS
+from ccc_storage_cli.main import main as control_main
 from ccc_storage_hpc.client import main as hpc_main
 from ccc_storage_mountd.daemon import main as mountd_main
 from ccc_storage_pack.cli import main as pack_main
@@ -52,7 +53,9 @@ _DISPATCH: dict[str, Dispatcher] = {
 def _format_help() -> str:
     tool_width = max(len(name) for name, _ in _TOOL_HELP)
     control_width = max(len(name) for name in CONTROL_COMMANDS)
-    control_lines = "\n".join(f"  {name:<{control_width}}  mountd control operation" for name in CONTROL_COMMANDS)
+    control_lines = "\n".join(
+        f"  {name:<{control_width}}  mountd control operation" for name in CONTROL_COMMANDS
+    )
     tool_lines = "\n".join(f"  {name:<{tool_width}}  {desc}" for name, desc in _TOOL_HELP)
     choices = ",".join([name for name, _ in _TOOL_HELP] + list(CONTROL_COMMANDS))
     return f"""usage: ccc-storage [-h] [--version] {{{choices}}} ...

@@ -23,8 +23,10 @@ Level model (see ``docs/design/log-structured-pack-levels.md``):
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+
+from ccc_storage_core.manifest import PackInfo
 
 # Documented default level shape (binary units). Tests use tiny custom levels.
 DEFAULT_LEVELS_SPEC = "0:100G,1:10G,2:1G,3:100M,4:10M"
@@ -164,7 +166,7 @@ class LevelPolicy:
 
 @dataclass(frozen=True)
 class CompactionCandidate:
-    packs: tuple[object, ...]
+    packs: tuple[PackInfo, ...]
     target_level: int
     total_bytes: int
     blocked_reason: str = ""
@@ -194,7 +196,7 @@ def target_level_for(policy: LevelPolicy, total: int) -> int:
     return choose_initial_level(policy, total)
 
 
-def _is_valid_stack(packs, policy: LevelPolicy) -> bool:
+def _is_valid_stack(packs: tuple[PackInfo, ...], policy: LevelPolicy) -> bool:
     """True if the stack (oldest→newest) already obeys the level invariant."""
     counts: dict[int, int] = {}
     prev_level: int | None = None
@@ -210,7 +212,7 @@ def _is_valid_stack(packs, policy: LevelPolicy) -> bool:
 
 
 def plan_level_compaction(
-    packs,
+    packs: Iterable[PackInfo],
     policy: LevelPolicy,
     *,
     allow_base: bool = False,

@@ -37,7 +37,7 @@ from ccc_storage_mountd.overlay import (
 
 # Names that are internal bookkeeping, never real children. Hidden from listings
 # and refused as child names (RK-8).
-_HIDDEN_NAMES = frozenset({".ccc-storage", "ccc-storage", "ccc-storage"})
+_HIDDEN_NAMES = frozenset({".ccc-storage", "ccc-storage"})
 
 
 class ManagedParentError(RuntimeError):

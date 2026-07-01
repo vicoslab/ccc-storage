@@ -360,6 +360,7 @@ class ChildMountManager:
                 f"local writer lock is held for {manifest.id} and no published mirror exists"
             )
         mnt = Path(mountpoint)
+        handle: MountHandle
         if manifest.pack_stack.lowers:
             handle = mount_dirs_and_packs_ro(
                 (latest.path,),
