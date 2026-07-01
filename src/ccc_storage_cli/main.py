@@ -44,6 +44,7 @@ CONTROL_COMMANDS = (
     "observe-ls",
     "observe-mkdir",
     "observe-access",
+    "observe-init",
     "rename",
     "env-txn",
     "env-status",
@@ -80,12 +81,23 @@ def _request(
     sock_path = _socket_path()
     if not Path(sock_path).exists():
         return 2, {"error": f"mountd not reachable on this node: {sock_path}", "code": "ENOSOCK"}
+    request = Request(command=command, path=path, payload=payload or {})
+    try:
+        from ccc_storage_mountd.control import inprocess_dispatch
+    except Exception:
+        inprocess = None
+    else:
+        inprocess = inprocess_dispatch(sock_path, request)
+    if inprocess is not None:
+        if not inprocess.ok:
+            return 2, {"error": inprocess.error, "code": inprocess.code}
+        return 0, inprocess.result
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     timeout = float(os.environ.get("CCC_MOUNTD_REQUEST_TIMEOUT", "60"))
     sock.settimeout(timeout)
     try:
         sock.connect(sock_path)
-        sock.sendall(encode_request(Request(command=command, path=path, payload=payload or {})))
+        sock.sendall(encode_request(request))
         response = decode_response(_read_line(sock))
     except OSError as exc:
         return 2, {"error": f"mountd not reachable on this node: {exc}", "code": "ENOSOCK"}
@@ -174,6 +186,8 @@ def _socket_command(ns: argparse.Namespace) -> int:
         payload["allow_base"] = bool(getattr(ns, "allow_base", False))
     if ns.cmd == "cold-archive":
         payload["keep_hot"] = bool(getattr(ns, "keep_hot", False))
+    if ns.cmd == "observe-init":
+        payload["state_subdir"] = getattr(ns, "state_subdir", ".ccc-storage")
     code, result = _request(ns.cmd, path=getattr(ns, "path", ""), payload=payload)
     if code != 0:
         if getattr(ns, "json", False):
@@ -316,6 +330,14 @@ def main(argv: list[str] | None = None, *, prog: str = "ccc-storage") -> int:
         p.add_argument("path", help="path under an observation root")
         p.add_argument("--json", action="store_true")
         p.set_defaults(func=_socket_command)
+
+    observe = sub.add_parser("observe", help="observation-directory lifecycle")
+    observe_sub = observe.add_subparsers(dest="observe_cmd", required=True)
+    observe_init = observe_sub.add_parser("init", help="initialize an observation directory")
+    observe_init.add_argument("path")
+    observe_init.add_argument("--state-subdir", default=".ccc-storage")
+    observe_init.add_argument("--json", action="store_true")
+    observe_init.set_defaults(cmd="observe-init", func=_socket_command)
 
     rename = sub.add_parser("rename", help="rename a managed-parent child via mountd")
     rename.add_argument("path", help="current child name")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import errno
+import os
 
 import pytest
 
@@ -26,6 +27,9 @@ class FakePyFuse3:
     ROOT_INODE = 1
     FUSEError = FakeFuseError
     EntryAttributes = FakeEntryAttributes
+
+    class FileInfo:
+        pass
 
 
 class FakeHandle:
@@ -137,7 +141,7 @@ def test_fuse_ops_rename_rejects_nonzero_flags(fake_nfs, tmp_path):
 
     assert exc_info.value.errno == errno.EINVAL
 
-def test_fuse_ops_mkdir_mounts_generation0_child_for_immediate_writes(
+def test_fuse_ops_mkdir_registers_then_child_write_mounts_private_view(
     monkeypatch,
     fake_nfs,
     tmp_path,
@@ -149,11 +153,29 @@ def test_fuse_ops_mkdir_mounts_generation0_child_for_immediate_writes(
         return FakeHandle(mountpoint)
 
     monkeypatch.setattr(childmount, "mount_layered_rw", fake_mount_layered_rw)
-    _source, _mount_root, service, core = _core(fake_nfs, tmp_path)
+    source, _mount_root, service, core = _core(fake_nfs, tmp_path)
     ops = ObservationFuseOperations(core, FakePyFuse3)
 
     asyncio.run(ops.mkdir(FakePyFuse3.ROOT_INODE, b"new-env", 0o755))
 
+    assert mount_calls == []
+    assert service.mounts.active_ids() == []
+
+    async def write_child_file():
+        env_attrs = await ops.lookup(FakePyFuse3.ROOT_INODE, b"new-env")
+        file_info, _attrs = await ops.create(
+            env_attrs.st_ino,
+            b"created.txt",
+            0o644,
+            os.O_WRONLY | os.O_TRUNC,
+        )
+        await ops.write(file_info.fh, 0, b"payload")
+        await ops.release(file_info.fh)
+
+    asyncio.run(write_child_file())
+
     assert len(mount_calls) == 1
     assert service.mounts.active_ids() == ["observe:new-env"]
+    assert (mount_calls[0][2] / "created.txt").read_text() == "payload"
+    assert not (source / "new-env" / "created.txt").exists()
 

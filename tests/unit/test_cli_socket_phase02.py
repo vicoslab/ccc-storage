@@ -39,3 +39,37 @@ def test_cli_status_fails_fast_when_socket_down(tmp_path, monkeypatch, capsys):
 
     assert cli_main(["status", "dataset:foo"]) == 2
     assert "mountd not reachable" in capsys.readouterr().out.lower()
+
+
+def test_cli_observe_init_creates_and_registers_observation_dir(tmp_path, monkeypatch, capsys):
+    service = MountdService(nfs_root=tmp_path / "legacy-state", run_dir=tmp_path / "run")
+    sock = tmp_path / "mountd.sock"
+    server = ControlServer(sock, service)
+    server.start()
+    monkeypatch.setenv("CCC_MOUNTD_SOCK", str(sock))
+    observation = tmp_path / "observations" / "envs"
+    try:
+        assert (
+            cli_main(
+                [
+                    "observe",
+                    "init",
+                    str(observation),
+                    "--state-subdir",
+                    ".ccc-alt",
+                    "--json",
+                ]
+            )
+            == 0
+        )
+    finally:
+        server.stop()
+
+    assert '"state_subdir": ".ccc-alt"' in capsys.readouterr().out
+    for name in ("registry", "packs", "overlays", "locks", "events"):
+        assert (observation / ".ccc-alt" / name).is_dir()
+    assert service.observation_router is not None
+    assert (
+        service.observation_router.resolve(str(observation / "child")).root.public_path
+        == observation
+    )

@@ -9,16 +9,29 @@
 # < explicit `ccc-storage mountd ...` flags.
 
 [paths]
-# Shared NFS-backed CCC storage state. This is mountd state, not a client cache.
-nfs_root = "/storage/.ccc-storage"
+# Legacy shared CCC storage state for managed-parent deployments. Observation
+# directories below keep their persistent state inside each observed directory.
+# nfs_root = "/storage/.ccc-storage"
 run_dir = "/run/ccc-storage"
 socket = "/run/ccc-storage/mountd.sock"
 ready_file = "/run/ccc-storage/ready.json"
 
-# One of these operating modes is typically configured by deployment:
+# Optional legacy managed-parent mode:
 # managed_parent = "/managed/datasets"
-observe_root = "/storage/user/layered-source"
-observe_mountpoint = "/storage/user/layered"
+
+# Primary observation-directory mode. Each path is the public directory and the
+# in-place observation mountpoint. Persistent state lives under
+# <path>/<state_subdir>.
+[[observation_dirs]]
+path = "/storage/user"
+state_subdir = ".ccc-storage"
+
+[[observation_dirs]]
+path = "/storage/datasets"
+
+# Legacy marker-observation path triple, retained for compatibility only:
+# observe_root = "/storage/user/layered-source"
+# observe_mountpoint = "/storage/user/layered"
 
 # Node-local scratch for local-ssd-async write policy.
 local_overlay_root = "/run/ccc-storage/local-overlays"

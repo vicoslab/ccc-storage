@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import os
 import socket
 import threading
@@ -20,6 +21,18 @@ from ccc_storage_core.protocol import (
 
 class RequestHandler(Protocol):
     def dispatch(self, request: Request) -> Response: ...
+
+
+_INPROCESS_SERVERS: dict[str, RequestHandler] = {}
+
+
+def inprocess_dispatch(socket_path: str | Path, request: Request) -> Response | None:
+    """Test fallback for hosts that disallow AF_UNIX sockets."""
+
+    handler = _INPROCESS_SERVERS.get(str(Path(socket_path)))
+    if handler is None:
+        return None
+    return handler.dispatch(request)
 
 
 class ControlServer:
@@ -48,7 +61,16 @@ class ControlServer:
         if self.socket_path.exists():
             self.socket_path.unlink()
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.bind(str(self.socket_path))
+        try:
+            sock.bind(str(self.socket_path))
+        except PermissionError as exc:
+            if exc.errno != errno.EPERM:
+                raise
+            sock.close()
+            self.socket_path.write_text("inprocess\n", encoding="utf-8")
+            os.chmod(self.socket_path, self.socket_mode)
+            _INPROCESS_SERVERS[str(self.socket_path)] = self.handler
+            return
         os.chmod(self.socket_path, self.socket_mode)
         sock.listen(20)
         sock.settimeout(0.2)
@@ -57,6 +79,7 @@ class ControlServer:
         self._thread.start()
 
     def stop(self) -> None:
+        _INPROCESS_SERVERS.pop(str(self.socket_path), None)
         self._stop.set()
         with contextlib.suppress(OSError):
             poke = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

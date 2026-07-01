@@ -58,6 +58,12 @@ class ObservationDispatchCore:
         self.service = service
         self.ownership = getattr(service, "ownership", Ownership())
         self.materialize_mountpoints = materialize_mountpoints
+        self.reserved_name = ".ccc-storage"
+
+    def _service_observe_path(self, rel_path: str) -> str:
+        if getattr(self.service, "observation_router", None) is not None:
+            return str(self.mount_path(rel_path))
+        return rel_path
 
     def validate_name(self, name: str | bytes) -> str:
         if isinstance(name, bytes):
@@ -77,8 +83,37 @@ class ObservationDispatchCore:
             raise ValueError(f"unsafe dispatcher path: {text!r}")
         return "/".join(parts)
 
+    def _contains_reserved(self, rel_path: str) -> bool:
+        return any(part == self.reserved_name for part in rel_path.split("/") if part)
+
+    def _private_child_path(self, rel_path: str) -> Path | None:
+        rel = self.normalize_rel(rel_path)
+        if rel == "" or self._contains_reserved(rel):
+            return None
+        _boundary, _, inner = rel.partition("/")
+        try:
+            status = self.service.handle_observe_access_private(self._service_observe_path(rel))
+        except RuntimeError as exc:
+            message = str(exc)
+            if (
+                "not registered" in message
+                or "not found" in message
+                or "not under" in message
+                or "no observation root" in message
+            ):
+                return None
+            raise
+        mountpoint = status.get("mountpoint")
+        if not mountpoint:
+            return None
+        mounted = Path(mountpoint)
+        return mounted if not inner else mounted / inner
+
     def source_path(self, rel_path: str | Path) -> Path:
         rel = self.normalize_rel(rel_path)
+        private_path = self._private_child_path(rel)
+        if private_path is not None:
+            return private_path
         return self.source_root if rel == "" else self.source_root / rel
 
     def mount_path(self, rel_path: str | Path) -> Path:
@@ -91,6 +126,8 @@ class ObservationDispatchCore:
         name = path.name if rel else ""
         if rel == "":
             return DispatchEntry(path=rel, name=name, kind="dir")
+        if self._contains_reserved(rel):
+            raise FileNotFoundError(rel)
         if path.is_dir():
             return DispatchEntry(path=rel, name=name, kind="dir")
         if path.is_file():
@@ -101,13 +138,20 @@ class ObservationDispatchCore:
         path = self.source_path(rel_path)
         if not path.is_dir():
             raise NotADirectoryError(str(path))
-        return sorted(entry.name for entry in path.iterdir())
+        return sorted(entry.name for entry in path.iterdir() if entry.name != self.reserved_name)
 
     def mkdir(self, rel_path: str | Path) -> DispatchEntry:
         rel = self.normalize_rel(rel_path)
         if rel == "":
             raise ValueError("cannot mkdir dispatcher root")
-        status = self.service.handle_observe_mkdir(rel)
+        if self._contains_reserved(rel):
+            raise ValueError(f"reserved dispatcher path: {rel}")
+        if "/" in rel:
+            path = self.source_path(rel)
+            path.mkdir()
+            self.ownership.apply(path)
+            return DispatchEntry(path=rel, name=path.name, kind="dir")
+        status = self.service.handle_observe_mkdir(self._service_observe_path(rel))
         # In unit/smoke contexts where mount_root is a real directory, materialise
         # the visible mountpoint. When mount_root is an active FUSE mount this path
         # already exists virtually; recursive mkdir failures are ignored there.
@@ -118,8 +162,38 @@ class ObservationDispatchCore:
                 self.ownership.apply(mountpoint)
         return DispatchEntry(path=status["parent_path"], name=status["name"], kind="dir")
 
+    def read(self, rel_path: str | Path, *, size: int, offset: int = 0) -> bytes:
+        rel = self.normalize_rel(rel_path)
+        if self._contains_reserved(rel):
+            raise FileNotFoundError(rel)
+        path = self.source_path(rel)
+        if not path.is_file():
+            raise FileNotFoundError(rel)
+        with path.open("rb") as fh:
+            fh.seek(offset)
+            return fh.read(size)
+
     def ensure_mounted_for(self, rel_path: str | Path) -> dict[str, Any] | None:
         rel = self.normalize_rel(rel_path)
+        if getattr(self.service, "observation_router", None) is not None:
+            if rel == "" or self._contains_reserved(rel):
+                return None
+            boundary = rel.split("/", 1)[0]
+            mountpoint = self.mount_path(boundary)
+            if self.materialize_mountpoints:
+                with contextlib_suppress_oserror():
+                    mountpoint.mkdir(parents=True, exist_ok=True)
+                    self.ownership.apply(mountpoint)
+            try:
+                return self.service.handle_observe_access_at(
+                    self._service_observe_path(rel),
+                    str(mountpoint),
+                )
+            except RuntimeError as exc:
+                message = str(exc)
+                if "not registered" in message or "not found" in message:
+                    return None
+                raise
         observed = resolve_observed_child(self.source_root, rel)
         if observed is None:
             return None
@@ -128,14 +202,23 @@ class ObservationDispatchCore:
             with contextlib_suppress_oserror():
                 mountpoint.mkdir(parents=True, exist_ok=True)
                 self.ownership.apply(mountpoint)
-        return self.service.handle_observe_access_at(rel, str(mountpoint))
+        try:
+            return self.service.handle_observe_access_at(
+                self._service_observe_path(rel),
+                str(mountpoint),
+            )
+        except RuntimeError as exc:
+            message = str(exc)
+            if "not registered" in message or "not found" in message:
+                return None
+            raise
 
 
     def rmdir(self, rel_path: str | Path) -> dict[str, Any]:
         rel = self.normalize_rel(rel_path)
         if rel == "":
             raise ValueError("cannot remove dispatcher root")
-        result = self.service.handle_observe_rmdir(rel)
+        result = self.service.handle_observe_rmdir(self._service_observe_path(rel))
         if self.materialize_mountpoints:
             with contextlib_suppress_oserror():
                 self.mount_path(rel).rmdir()
@@ -146,7 +229,10 @@ class ObservationDispatchCore:
         new = self.normalize_rel(new_path)
         if old == "" or new == "":
             raise ValueError("cannot rename dispatcher root")
-        result = self.service.handle_observe_rename(old, new)
+        result = self.service.handle_observe_rename(
+            self._service_observe_path(old),
+            self._service_observe_path(new),
+        )
         if self.materialize_mountpoints:
             with contextlib_suppress_oserror():
                 self.mount_path(old).rename(self.mount_path(new))
@@ -211,6 +297,8 @@ class ObservationFuseOperations:  # pragma: no cover - exercised by runtime smok
         self._inode_to_path: dict[int, str] = {pyfuse3.ROOT_INODE: ""}
         self._path_to_inode: dict[str, int] = {"": pyfuse3.ROOT_INODE}
         self._next_inode = pyfuse3.ROOT_INODE + 1
+        self._next_fh = 1
+        self._fh_to_fd: dict[int, int] = {}
         self._mount_lock = threading.Lock()
         self._mounting: set[str] = set()
 
@@ -308,16 +396,9 @@ class ObservationFuseOperations:  # pragma: no cover - exercised by runtime smok
             entry = self.core.entry_for(rel)
         except (ValueError, FileNotFoundError):
             raise self.pyfuse3.FUSEError(errno.ENOENT) from None
-        if entry.kind == "dir" and rel:
-            # Directory lookup is the lazy mount trigger. mkdir() itself does not
-            # mount; a later lookup/stat/open below the child does.
-            self._trigger_mount(rel)
         return self._attrs(entry)
 
     async def opendir(self, inode: int, ctx: object | None = None) -> int:
-        rel = self._rel_for_inode(inode)
-        if rel:
-            self._trigger_mount(rel)
         return inode
 
     async def readdir(self, inode: int, off: int, token: object) -> None:
@@ -342,6 +423,94 @@ class ObservationFuseOperations:  # pragma: no cover - exercised by runtime smok
     async def releasedir(self, fh: int) -> None:
         return None
 
+    async def open(self, inode: int, flags: int, ctx: object | None = None) -> Any:
+        rel = self._rel_for_inode(inode)
+        try:
+            entry = self.core.entry_for(rel)
+        except FileNotFoundError:
+            raise self.pyfuse3.FUSEError(errno.ENOENT) from None
+        if entry.kind != "file":
+            raise self.pyfuse3.FUSEError(errno.EISDIR)
+        try:
+            fd = os.open(self.core.source_path(rel), flags)
+        except OSError as exc:
+            raise self.pyfuse3.FUSEError(exc.errno) from exc
+        fh = self._next_fh
+        self._next_fh += 1
+        self._fh_to_fd[fh] = fd
+        file_info = self.pyfuse3.FileInfo()
+        file_info.fh = fh
+        return file_info
+
+    async def create(
+        self,
+        parent_inode: int,
+        name: bytes,
+        mode: int,
+        flags: int,
+        ctx: object | None = None,
+    ) -> Any:
+        parent = self._rel_for_inode(parent_inode)
+        try:
+            child_name = self.core.validate_name(name)
+            rel = child_name if parent == "" else f"{parent}/{child_name}"
+            if self.core._contains_reserved(rel):
+                raise self.pyfuse3.FUSEError(errno.ENOENT)
+            fd = os.open(self.core.source_path(rel), flags | os.O_CREAT, mode)
+            self.core.ownership.apply(self.core.source_path(rel))
+            entry = self.core.entry_for(rel)
+        except ValueError:
+            raise self.pyfuse3.FUSEError(errno.EINVAL) from None
+        except OSError as exc:
+            raise self.pyfuse3.FUSEError(exc.errno) from exc
+        fh = self._next_fh
+        self._next_fh += 1
+        self._fh_to_fd[fh] = fd
+        file_info = self.pyfuse3.FileInfo()
+        file_info.fh = fh
+        return file_info, self._attrs(entry)
+
+    async def read(self, fh: int, off: int, size: int) -> bytes:
+        fd = self._fh_to_fd.get(fh)
+        if fd is None:
+            raise self.pyfuse3.FUSEError(errno.EBADF)
+        return os.pread(fd, size, off)
+
+    async def write(self, fh: int, off: int, buf: bytes) -> int:
+        fd = self._fh_to_fd.get(fh)
+        if fd is None:
+            raise self.pyfuse3.FUSEError(errno.EBADF)
+        return os.pwrite(fd, buf, off)
+
+    async def flush(self, fh: int) -> None:
+        fd = self._fh_to_fd.get(fh)
+        if fd is not None:
+            os.fsync(fd)
+
+    async def fsync(self, fh: int, datasync: bool) -> None:
+        fd = self._fh_to_fd.get(fh)
+        if fd is not None:
+            os.fdatasync(fd) if datasync and hasattr(os, "fdatasync") else os.fsync(fd)
+
+    async def release(self, fh: int) -> None:
+        fd = self._fh_to_fd.pop(fh, None)
+        if fd is not None:
+            os.close(fd)
+
+    async def unlink(self, parent_inode: int, name: bytes, ctx: object | None = None) -> None:
+        parent = self._rel_for_inode(parent_inode)
+        try:
+            child_name = self.core.validate_name(name)
+            rel = child_name if parent == "" else f"{parent}/{child_name}"
+            if self.core._contains_reserved(rel):
+                raise self.pyfuse3.FUSEError(errno.ENOENT)
+            self.core.source_path(rel).unlink()
+            self._drop_inode_for(rel)
+        except ValueError:
+            raise self.pyfuse3.FUSEError(errno.EINVAL) from None
+        except OSError as exc:
+            raise self.pyfuse3.FUSEError(exc.errno) from exc
+
     async def mkdir(
         self,
         parent_inode: int,
@@ -354,7 +523,6 @@ class ObservationFuseOperations:  # pragma: no cover - exercised by runtime smok
             child_name = self.core.validate_name(name)
             rel = child_name if parent == "" else f"{parent}/{child_name}"
             entry = self.core.mkdir(rel)
-            self._trigger_mount(rel)
         except ValueError:
             raise self.pyfuse3.FUSEError(errno.EINVAL) from None
         except FileExistsError:
@@ -428,6 +596,7 @@ def mount_observation_dispatcher(
     options = set(pyfuse3.default_options)
     options.add("fsname=ccc-storage-observe")
     options.add("subtype=ccc-storage-observe")
+    options.add("allow_other")
     pyfuse3.init(ops, str(mountpoint), options)
     try:
         trio.run(pyfuse3.main)

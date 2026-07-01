@@ -9,7 +9,7 @@ ccc-storage <command> [args...]
 The command has two layers:
 
 - Tool namespaces: `pack`, `mountd`, `hpc`, `cold`, `conda`, `mamba`, and `benchmark`.
-- Direct mountd-control operations: `doctor`, `status`, `mount`, `commit`, `compact`, `cold-status`, `cold-archive`, `cold-recall`, `observe-ls`, `init-conda-envs`, and the other control verbs listed by top-level help.
+- Direct mountd-control operations: `doctor`, `status`, `mount`, `commit`, `compact`, `cold-status`, `cold-archive`, `cold-recall`, `observe init`, `observe-ls`, `init-conda-envs`, and the other control verbs listed by top-level help.
 
 Regenerate/check help locally from the repository root with:
 
@@ -108,6 +108,7 @@ ccc-storage doctor
 ccc-storage status observe:my-env --json
 ccc-storage commit observe:my-env -m "updated env"
 ccc-storage compact observe:my-env --dry-run --json
+ccc-storage observe init /storage/user/user1/conda/envs
 ```
 
 Subcommand-specific help is available for each direct operation:

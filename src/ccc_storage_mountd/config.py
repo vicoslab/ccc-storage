@@ -44,6 +44,14 @@ class ConfigError(ValueError):
 
 
 @dataclass(frozen=True)
+class ObservationDirConfig:
+    """A public observation directory and its persistent state subdir."""
+
+    path: str
+    state_subdir: str = ".ccc-storage"
+
+
+@dataclass(frozen=True)
 class MountdConfig:
     """Resolved mountd configuration before final CLI overrides.
 
@@ -58,6 +66,7 @@ class MountdConfig:
     managed_parent: str = ""
     observe_root: str = ""
     observe_mountpoint: str = ""
+    observation_dirs: tuple[ObservationDirConfig, ...] = ()
     local_overlay_root: str = ""
 
     prefer_kernel: bool = False
@@ -138,10 +147,19 @@ class MountdConfig:
                 "compaction",
                 "cold_storage",
                 "s3",
+                "observation_dirs",
             },
             source,
         )
         cfg = self
+
+        cfg = replace(
+            cfg,
+            observation_dirs=_observation_dirs_from_mapping(
+                data.get("observation_dirs", ()),
+                source,
+            ),
+        )
 
         paths = _table(data, "paths", source)
         _check_keys(
@@ -299,6 +317,18 @@ class MountdConfig:
         cfg = _env_replace_str(cfg, env, "CCC_MANAGED_PARENT", "managed_parent")
         cfg = _env_replace_str(cfg, env, "CCC_OBSERVE_ROOT", "observe_root")
         cfg = _env_replace_str(cfg, env, "CCC_OBSERVE_MOUNTPOINT", "observe_mountpoint")
+        if _env_has(env, "CCC_OBSERVATION_DIRS"):
+            state_subdir = env.get("CCC_OBSERVATION_STATE_SUBDIR", ".ccc-storage").strip()
+            if not state_subdir:
+                state_subdir = ".ccc-storage"
+            cfg = replace(
+                cfg,
+                observation_dirs=tuple(
+                    ObservationDirConfig(path=part.strip(), state_subdir=state_subdir)
+                    for part in env["CCC_OBSERVATION_DIRS"].split(":")
+                    if part.strip()
+                ),
+            )
         cfg = _env_replace_str(cfg, env, "CCC_LOCAL_OVERLAY_ROOT", "local_overlay_root")
         cfg = _env_replace_bool(cfg, env, "CCC_PREFER_KERNEL", "prefer_kernel")
         cfg = _env_replace_str(cfg, env, "CCC_MOUNTD_SOCKET_MODE", "socket_mode")
@@ -405,6 +435,34 @@ def _replace_if_present(
         if key in table:
             updates[attr] = parser(table[key], f"{source}: {section}.{key}")
     return replace(cfg, **updates) if updates else cfg
+
+
+def _observation_dirs_from_mapping(value: Any, source: str) -> tuple[ObservationDirConfig, ...]:
+    if value in (None, (), []):
+        return ()
+    if not isinstance(value, list):
+        raise ConfigError(f"{source}: observation_dirs must be an array of tables")
+    parsed: list[ObservationDirConfig] = []
+    for index, item in enumerate(value):
+        label = f"observation_dirs[{index}]"
+        if not isinstance(item, dict):
+            raise ConfigError(f"{source}: {label} must be a table")
+        _check_keys(item, label, {"path", "state_subdir"}, source)
+        if "path" not in item:
+            raise ConfigError(f"{source}: {label}.path is required")
+        path = _as_str(item["path"], f"{source}: {label}.path")
+        if not path:
+            raise ConfigError(f"{source}: {label}.path must not be empty")
+        state_subdir = _as_str(
+            item.get("state_subdir", ".ccc-storage"),
+            f"{source}: {label}.state_subdir",
+        )
+        if not state_subdir:
+            raise ConfigError(f"{source}: {label}.state_subdir must not be empty")
+        if "/" in state_subdir or state_subdir in {".", ".."}:
+            raise ConfigError(f"{source}: {label}.state_subdir must be a directory name")
+        parsed.append(ObservationDirConfig(path=path, state_subdir=state_subdir))
+    return tuple(parsed)
 
 
 def _cold_from_mapping(

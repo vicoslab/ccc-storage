@@ -116,11 +116,12 @@ class ChildMountManager:
             require_existing=False,
         )
 
-    def mount_rw(self, manifest: ChildManifest) -> MountRecord:
+    def mount_rw(self, manifest: ChildManifest, *, increment_ref: bool = True) -> MountRecord:
         return self.mount_rw_at(
             manifest,
             self.mounts_dir / _safe_name(manifest.id),
             require_existing=False,
+            increment_ref=increment_ref,
         )
 
     def _reuse_existing(

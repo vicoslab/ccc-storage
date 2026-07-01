@@ -51,7 +51,8 @@ section boundaries are:
 
 | Section | Purpose |
 |---|---|
-| `[paths]` | NFS state root, run/socket paths, observation/managed-parent paths, local SSD overlay root. |
+| `[paths]` | Runtime paths, optional legacy NFS state root, optional legacy managed-parent paths, local SSD overlay root. |
+| `[[observation_dirs]]` | Primary observation directories. Each path owns `<path>/.ccc-storage` state by default. |
 | `[runtime]` | Mount/runtime toggles such as `prefer_kernel`, socket mode, and observation readiness timeout. |
 | `[defaults]` | Defaults applied to newly discovered/created children, currently `write_policy`. |
 | `[maintenance]` | Periodic local housekeeping intervals: idle unmount, reap loop, dirty mirror publish. |
@@ -67,6 +68,34 @@ the TOML file.
 A legacy/simple top-level `[s3]` table is also accepted for backend location
 fields, but new files should prefer `[cold_storage.s3]` so the subsystem remains
 backend-neutral.
+
+## Observation directories
+
+Normal deployments should configure observation directories instead of the legacy
+`paths.nfs_root` + `paths.observe_root` + `paths.observe_mountpoint` triple:
+
+```toml
+[[observation_dirs]]
+path = "/storage/user"
+state_subdir = ".ccc-storage"  # default
+
+[[observation_dirs]]
+path = "/storage/datasets"
+```
+
+Mountd creates and uses:
+
+```text
+OBSERVATION_DIR/.ccc-storage/{registry,packs,overlays,locks,events}
+```
+
+Nested observation directories are allowed.  Operations below a nested root use
+the nearest root's `.ccc-storage` state.  At runtime, initialize and register a
+new root through mountd:
+
+```bash
+ccc-storage observe init /storage/user/user1/conda/envs
+```
 
 ## Client configuration boundary
 

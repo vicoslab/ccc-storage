@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -41,7 +42,12 @@ from ccc_storage_core.names import safe_namespace_name
 from ccc_storage_core.protocol import Request, Response
 from ccc_storage_mountd import __version__
 from ccc_storage_mountd.childmount import ChildMountError, ChildMountManager
-from ccc_storage_mountd.config import CONFIG_ENV_VAR, ConfigError, MountdConfig
+from ccc_storage_mountd.config import (
+    CONFIG_ENV_VAR,
+    ConfigError,
+    MountdConfig,
+    ObservationDirConfig,
+)
 from ccc_storage_mountd.control import ControlServer
 from ccc_storage_mountd.dispatcher_fuse import mount_observation_dispatcher
 from ccc_storage_mountd.managed_parent import (
@@ -51,7 +57,13 @@ from ccc_storage_mountd.managed_parent import (
     ManagedParent,
     ManagedParentError,
 )
-from ccc_storage_mountd.observation import ObservationError, ObservationManager
+from ccc_storage_mountd.observation import (
+    ObservationError,
+    ObservationManager,
+    ObservationRouter,
+    ObservationStorage,
+    initialize_observation_dir,
+)
 from ccc_storage_mountd.overlay import (
     OverlayPaths,
     cleanup_dirty_mirror,
@@ -102,6 +114,7 @@ class MountdService:
         managed_parent: str | None = None,
         observe_root: str | Path | None = None,
         observe_mountpoint: str | Path | None = None,
+        observation_dirs: tuple[ObservationDirConfig | ObservationStorage, ...] = (),
         default_write_policy: str = WRITE_POLICY_SHARED_NFS,
         local_overlay_root: str | Path | None = None,
         node_id: str | None = None,
@@ -110,6 +123,9 @@ class MountdService:
         storage_gid: int | None = None,
         cold_config: ColdStorageConfig | None = None,
         cold_store: ObjectStore | None = None,
+        runtime_observation_dispatchers: bool = False,
+        observation_ready_timeout: float = 10.0,
+        runtime_prog: str = "ccc-storage mountd",
     ) -> None:
         self.nfs_root = Path(nfs_root)
         self.run_dir = Path(run_dir)
@@ -118,6 +134,9 @@ class MountdService:
         self.ownership = Ownership(uid=storage_uid, gid=storage_gid)
         self.cold_config = cold_config or ColdStorageConfig.from_env(os.environ)
         self.cold_store = cold_store or self.cold_config.build_store()
+        self.runtime_observation_dispatchers = runtime_observation_dispatchers
+        self.observation_ready_timeout = observation_ready_timeout
+        self.runtime_prog = runtime_prog
         self.registry_dir = self.nfs_root / "registry"
         self.mounts = ChildMountManager(
             self.run_dir,
@@ -129,8 +148,10 @@ class MountdService:
         )
         self.children: dict[str, ChildManifest] = {}
         self.manifest_paths: dict[str, Path] = {}
+        self.manifest_state_roots: dict[str, Path] = {}
         self.parent: ManagedParent | None = None
         self.observer: ObservationManager | None = None
+        self.observation_router: ObservationRouter | None = None
         self.observe_mountpoint = Path(observe_mountpoint) if observe_mountpoint else None
         if managed_parent:
             self.parent = ManagedParent(
@@ -142,7 +163,16 @@ class MountdService:
                 ownership=self.ownership,
                 prepare_manifest=self._ensure_hot,
             )
-        if observe_root:
+        if observation_dirs:
+            self.observation_router = ObservationRouter(
+                self.mounts,
+                default_write_policy=self.default_write_policy,
+                ownership=self.ownership,
+                prepare_manifest=self._ensure_hot,
+            )
+            for item in observation_dirs:
+                self.observation_router.add_root(item)
+        elif observe_root:
             self.observer = ObservationManager(
                 self.nfs_root,
                 observe_root,
@@ -155,15 +185,30 @@ class MountdService:
     def reload_registry(self) -> None:
         self.children.clear()
         self.manifest_paths.clear()
-        if not self.registry_dir.is_dir():
+        self.manifest_state_roots.clear()
+        state_roots = [self.nfs_root]
+        if self.observation_router is not None:
+            state_roots.extend(routed.root.state_dir for routed in self.observation_router.roots)
+        seen: set[Path] = set()
+        for state_root in state_roots:
+            state_root = Path(state_root)
+            if state_root in seen:
+                continue
+            seen.add(state_root)
+            self._scan_registry_root(state_root)
+
+    def _scan_registry_root(self, state_root: Path) -> None:
+        registry_dir = state_root / "registry"
+        if not registry_dir.is_dir():
             return
-        for path in sorted(self.registry_dir.rglob("*.toml")):
+        for path in sorted(registry_dir.rglob("*.toml")):
             try:
                 manifest = load_manifest(path)
             except Exception:
                 continue
             self.children[manifest.id] = manifest
             self.manifest_paths[manifest.id] = path
+            self.manifest_state_roots[manifest.id] = state_root
 
     def _find(self, selector: str) -> ChildManifest:
         self.reload_registry()
@@ -196,13 +241,31 @@ class MountdService:
             return path
         raise MountdError(f"manifest path not found for child {manifest.id}")
 
+    def _state_root_for_manifest(self, manifest: ChildManifest) -> Path:
+        state_root = self.manifest_state_roots.get(manifest.id)
+        if state_root is not None:
+            return state_root
+        self.reload_registry()
+        state_root = self.manifest_state_roots.get(manifest.id)
+        if state_root is not None:
+            return state_root
+        path = self.manifest_paths.get(manifest.id)
+        if path is not None and len(path.parents) >= 3:
+            # <state_root>/registry/.../child.toml
+            return path.parents[2]
+        return self.nfs_root
+
     def _write_manifest(self, manifest: ChildManifest) -> None:
         path = self._manifest_path(manifest)
         dump_atomic(path, manifest)
         self.ownership.apply(path)
 
     def _cold_lock_path(self, manifest: ChildManifest) -> Path:
-        return self.nfs_root / "locks" / f"{_safe_child_name(manifest.id)}.cold.lock"
+        return (
+            self._state_root_for_manifest(manifest)
+            / "locks"
+            / f"{_safe_child_name(manifest.id)}.cold.lock"
+        )
 
     def _require_cold_store(self) -> ObjectStore:
         if self.cold_store is None:
@@ -236,7 +299,7 @@ class MountdService:
             if not needs_recall(manifest):
                 return self._mark_accessed(manifest)
             store = self._require_cold_store()
-            hot_dir = hot_pack_dir(self.nfs_root, manifest.id)
+            hot_dir = hot_pack_dir(self._state_root_for_manifest(manifest), manifest.id)
             hot_dir.mkdir(parents=True, exist_ok=True)
             self.ownership.apply(hot_dir)
             recalled = recall_cold_storage_packs(
@@ -289,7 +352,10 @@ class MountdService:
         return self._manifest_status(manifest)
 
     def overlay_paths(self, manifest: ChildManifest) -> OverlayPaths:
-        return OverlayPaths.for_child(self.nfs_root / "overlays", manifest.id)
+        return OverlayPaths.for_child(
+            self._state_root_for_manifest(manifest) / "overlays",
+            manifest.id,
+        )
 
     def handle_commit(self, selector: str, *, message: str = "") -> dict[str, Any]:
         manifest = self._find(selector)
@@ -312,7 +378,11 @@ class MountdService:
         if not stats.dirty:
             return self._manifest_status(replace(manifest, state="clean"))
 
-        lock_path = self.nfs_root / "locks" / f"{_safe_child_name(manifest.id)}.commit.lock"
+        lock_path = (
+            self._state_root_for_manifest(manifest)
+            / "locks"
+            / f"{_safe_child_name(manifest.id)}.commit.lock"
+        )
         with NFSLock(lock_path, op="commit"):
             # Re-resolve after taking the lock, in case another node committed.
             manifest = self._find(selector)
@@ -335,7 +405,7 @@ class MountdService:
 
     def _commit_local_async(self, selector: str, *, message: str = "") -> dict[str, Any]:
         manifest = self._find(selector)
-        latest = latest_dirty_mirror(self.nfs_root, manifest.id)
+        latest = latest_dirty_mirror(self._state_root_for_manifest(manifest), manifest.id)
         if latest is None or (latest.file_count == 0 and latest.bytes == 0):
             return self._manifest_status(replace(manifest, state="clean"))
         writer_lock = NFSLock(self.mounts.writer_lock_path(manifest.id), op="commit-local")
@@ -347,10 +417,14 @@ class MountdService:
                 "unmount/drain writer first"
             ) from exc
         try:
-            lock_path = self.nfs_root / "locks" / f"{_safe_child_name(manifest.id)}.commit.lock"
+            lock_path = (
+                self._state_root_for_manifest(manifest)
+                / "locks"
+                / f"{_safe_child_name(manifest.id)}.commit.lock"
+            )
             with NFSLock(lock_path, op="commit"):
                 manifest = self._find(selector)
-                latest = latest_dirty_mirror(self.nfs_root, manifest.id)
+                latest = latest_dirty_mirror(self._state_root_for_manifest(manifest), manifest.id)
                 if latest is None or (latest.file_count == 0 and latest.bytes == 0):
                     return self._manifest_status(replace(manifest, state="clean"))
                 if latest.base_generation != manifest.generation:
@@ -370,7 +444,7 @@ class MountdService:
             writer_lock.release()
 
     def _cleanup_local_async_state(self, manifest_id: str) -> None:
-        cleanup_dirty_mirror(self.nfs_root, manifest_id)
+        cleanup_dirty_mirror(self._state_root_for_manifest(self._find(manifest_id)), manifest_id)
         self.mounts.cleanup_local_child(manifest_id)
 
     def _build_commit_from_source(
@@ -383,7 +457,7 @@ class MountdService:
         overlay_mode: str,
         cleanup,
     ) -> dict[str, Any]:
-        delta_dir = pack_object_dir(self.nfs_root / "packs", manifest.id)
+        delta_dir = pack_object_dir(self._state_root_for_manifest(manifest) / "packs", manifest.id)
         delta_dir.mkdir(parents=True, exist_ok=True)
         self.ownership.apply(delta_dir)
         delta_pack = delta_dir / f"delta-g{new_generation:04d}.sqfs"
@@ -492,7 +566,7 @@ class MountdService:
             maxes,
             default=manifest.generation,
         )
-        pack_dir = pack_object_dir(self.nfs_root / "packs", manifest.id)
+        pack_dir = pack_object_dir(self._state_root_for_manifest(manifest) / "packs", manifest.id)
         pack_dir.mkdir(parents=True, exist_ok=True)
         self.ownership.apply(pack_dir)
         name = f"compact-L{target_level}-g{generation_min:04d}-g{generation_max:04d}.sqfs"
@@ -565,7 +639,7 @@ class MountdService:
             raise ChildMountError(
                 f"cannot switch write policy for dirty child {manifest.id}; commit or discard first"
             )
-        latest = latest_dirty_mirror(self.nfs_root, manifest.id)
+        latest = latest_dirty_mirror(self._state_root_for_manifest(manifest), manifest.id)
         if latest is not None and latest.file_count > 0:
             raise ChildMountError(
                 f"cannot switch write policy for dirty local-async child {manifest.id}; "
@@ -652,9 +726,63 @@ class MountdService:
         return self._require_parent().access_child(name)
 
     def _require_observer(self) -> ObservationManager:
+        if self.observation_router is not None:
+            return self.observation_router  # type: ignore[return-value]
         if self.observer is None:
             raise MountdError("no observation root configured on this mountd")
         return self.observer
+
+    def handle_observe_init(
+        self,
+        path: str,
+        *,
+        state_subdir: str = ".ccc-storage",
+    ) -> dict[str, Any]:
+        if self.observation_router is None:
+            self.observation_router = ObservationRouter(
+                self.mounts,
+                default_write_policy=self.default_write_policy,
+                ownership=self.ownership,
+                prepare_manifest=self._ensure_hot,
+            )
+        if self.runtime_observation_dispatchers:
+            source_path = self._source_path_for_observation_public_path(path)
+            storage = _prepare_observation_storage_for_inplace_mount(
+                ObservationDirConfig(path=path, state_subdir=state_subdir),
+                run_dir=self.run_dir,
+                ownership=self.ownership,
+                source_path=source_path,
+            )
+            routed = self.observation_router.add_root(storage)
+            _start_observation_dispatcher_thread(
+                self,
+                routed.root,
+                ready_timeout=self.observation_ready_timeout,
+                prog=self.runtime_prog,
+            )
+        else:
+            routed = self.observation_router.add_root(
+                ObservationDirConfig(path=path, state_subdir=state_subdir)
+            )
+        self.reload_registry()
+        return {
+            "path": str(routed.root.public_path),
+            "source_root": str(routed.root.source_root),
+            "state_dir": str(routed.root.state_dir),
+            "state_subdir": routed.root.state_subdir,
+            "registered": True,
+        }
+
+    def _source_path_for_observation_public_path(self, path: str | Path) -> Path:
+        public_path = Path(path)
+        if self.observation_router is None:
+            return public_path
+        try:
+            routed = self.observation_router.resolve(public_path)
+        except ObservationError:
+            return public_path
+        rel = self.observation_router.rel_to_root(public_path, routed)
+        return routed.root.source_root if rel == "" else routed.root.source_root / rel
 
     def handle_observe_ls(self) -> dict[str, Any]:
         return self._require_observer().list_boundaries()
@@ -666,6 +794,9 @@ class MountdService:
 
     def handle_observe_access(self, path: str) -> dict[str, Any]:
         return self._require_observer().access_child(path)
+
+    def handle_observe_access_private(self, path: str) -> dict[str, Any]:
+        return self._require_observer().access_child(path, increment_ref=False)
 
     def handle_observe_access_at(self, path: str, mountpoint: str) -> dict[str, Any]:
         return self._require_observer().access_child_at(path, mountpoint)
@@ -692,6 +823,14 @@ class MountdService:
             "observation_mounted": bool(
                 self.observe_mountpoint and _is_mountpoint(self.observe_mountpoint)
             ),
+            "observation_dirs": [
+                {
+                    "path": str(routed.root.public_path),
+                    "state_dir": str(routed.root.state_dir),
+                    "state_subdir": routed.root.state_subdir,
+                }
+                for routed in (self.observation_router.roots if self.observation_router else ())
+            ],
             "runtime": _probe_summary_dict(),
             "default_write_policy": self.default_write_policy,
             "storage_uid": self.ownership.uid,
@@ -937,6 +1076,17 @@ class MountdService:
                 return Response(ok=True, result=self.handle_observe_mkdir(request.path))
             if request.command == "observe-access":
                 return Response(ok=True, result=self.handle_observe_access(request.path))
+            if request.command == "observe-init":
+                return Response(
+                    ok=True,
+                    result=self.handle_observe_init(
+                        request.path,
+                        state_subdir=str(
+                            request.payload.get("state_subdir", ".ccc-storage")
+                            or ".ccc-storage"
+                        ),
+                    ),
+                )
             if request.command == "doctor":
                 return Response(ok=True, result=self.handle_doctor())
             return Response(ok=False, error=f"unknown command: {request.command}", code="EPROTO")
@@ -973,7 +1123,7 @@ class MountdService:
         paths = self.overlay_paths(manifest)
         ensure_active_upper(paths, self.ownership)
         latest_mirror = (
-            latest_dirty_mirror(self.nfs_root, manifest.id)
+            latest_dirty_mirror(self._state_root_for_manifest(manifest), manifest.id)
             if manifest.write_policy == WRITE_POLICY_LOCAL_SSD_ASYNC
             else None
         )
@@ -1028,6 +1178,8 @@ class MountdService:
             "id": manifest.id,
             "name": manifest.name,
             "type": manifest.type,
+            "parent_id": manifest.parent_id,
+            "parent_path": manifest.parent_path,
             "state": state,
             "generation": manifest.generation,
             "write_policy": manifest.write_policy,
@@ -1131,6 +1283,123 @@ def _wait_for_mountpoint(path: str | Path, timeout: float) -> bool:
             return True
         time.sleep(0.1)
     return _is_mountpoint(path)
+
+
+def _prepare_observation_storage_for_inplace_mount(
+    config: ObservationDirConfig,
+    *,
+    run_dir: str | Path,
+    ownership: Ownership,
+    source_path: str | Path | None = None,
+) -> ObservationStorage:
+    """Create state on NFS and a private source bind for an in-place FUSE root."""
+
+    public_path = Path(config.path)
+    initialized = initialize_observation_dir(
+        source_path or public_path,
+        state_subdir=config.state_subdir,
+        ownership=ownership,
+    )
+    bind_root = (
+        Path(run_dir)
+        / "observation-sources"
+        / safe_namespace_name(str(initialized.public_path))
+        / "source"
+    )
+    bind_root.mkdir(parents=True, exist_ok=True)
+    ownership.apply(bind_root)
+    if not _is_mountpoint(bind_root):
+        try:
+            subprocess.run(
+                ["mount", "--bind", str(initialized.public_path), str(bind_root)],
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["mount", "--make-private", str(bind_root)],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            detail = getattr(exc, "stderr", "") or str(exc)
+            raise MountdError(
+                "failed to bind observation source "
+                f"{initialized.public_path} -> {bind_root}: {detail}"
+            ) from exc
+    return replace(
+        initialized,
+        public_path=public_path,
+        source_root=bind_root,
+        state_dir=bind_root / initialized.state_subdir,
+    )
+
+
+def _start_observation_dispatcher_thread(
+    service: MountdService,
+    storage: ObservationStorage,
+    *,
+    ready_timeout: float,
+    prog: str,
+) -> None:
+    def _run_observation_fuse() -> None:
+        try:
+            mount_observation_dispatcher(
+                service,
+                storage.source_root,
+                storage.public_path,
+            )
+        except Exception as exc:
+            print(
+                f"{prog}: observation dispatcher failed for {storage.public_path}: {exc}",
+                flush=True,
+            )
+            traceback.print_exc()
+            os._exit(3)
+
+    threading.Thread(
+        target=_run_observation_fuse,
+        name=f"ccc-storage-observe-fuse-{safe_namespace_name(str(storage.public_path))}",
+        daemon=True,
+    ).start()
+    if ready_timeout > 0 and not _wait_for_mountpoint(storage.public_path, ready_timeout):
+        raise MountdError(
+            f"observation dispatcher did not mount within {ready_timeout}s: {storage.public_path}"
+        )
+
+
+def _start_configured_observation_dispatchers(
+    service: MountdService,
+    configs: tuple[ObservationDirConfig, ...],
+    *,
+    ready_timeout: float,
+    prog: str,
+) -> None:
+    """Mount configured observation dirs in place with private source binds."""
+
+    if not configs:
+        return
+    if service.observation_router is None:
+        service.observation_router = ObservationRouter(
+            service.mounts,
+            default_write_policy=service.default_write_policy,
+            ownership=service.ownership,
+            prepare_manifest=service._ensure_hot,
+        )
+    for config in configs:
+        storage = _prepare_observation_storage_for_inplace_mount(
+            config,
+            run_dir=service.run_dir,
+            ownership=service.ownership,
+        )
+        service.observation_router.add_root(storage)
+        _start_observation_dispatcher_thread(
+            service,
+            storage,
+            ready_timeout=ready_timeout,
+            prog=prog,
+        )
 
 
 def _parse_owner_id(value: object, label: str = "owner id") -> int | None:
@@ -1363,6 +1632,7 @@ def main(argv: list[str] | None = None, *, prog: str = "ccc-storage mountd") -> 
         managed_parent=ns.managed_parent,
         observe_root=ns.observe_root,
         observe_mountpoint=ns.observe_mountpoint,
+        observation_dirs=mountd_config.observation_dirs,
         local_overlay_root=ns.local_overlay_root,
         prefer_kernel=bool(ns.prefer_kernel),
         socket_mode=ns.socket_mode,
@@ -1383,8 +1653,15 @@ def main(argv: list[str] | None = None, *, prog: str = "ccc-storage mountd") -> 
     if ns.probe:
         print("\n".join(_probe_summary()))
         return 0
-    if not ns.nfs_root:
-        print(f"{prog}: --nfs-root, $CCC_NFS_ROOT, or mountd config paths.nfs_root is required")
+    effective_nfs_root = ns.nfs_root
+    if not effective_nfs_root and effective_config.observation_dirs:
+        first_observation = effective_config.observation_dirs[0]
+        effective_nfs_root = str(Path(first_observation.path) / first_observation.state_subdir)
+    if not effective_nfs_root:
+        print(
+            f"{prog}: --nfs-root, $CCC_NFS_ROOT, mountd config paths.nfs_root, "
+            "or [[observation_dirs]] is required"
+        )
         return 2
     if (ns.storage_uid is None) != (ns.storage_gid is None):
         print(
@@ -1394,19 +1671,33 @@ def main(argv: list[str] | None = None, *, prog: str = "ccc-storage mountd") -> 
         return 2
 
     service = MountdService(
-        ns.nfs_root,
+        effective_nfs_root,
         ns.run_dir,
         prefer_kernel=bool(ns.prefer_kernel),
         managed_parent=ns.managed_parent or None,
         observe_root=ns.observe_root or None,
         observe_mountpoint=ns.observe_mountpoint or None,
+        observation_dirs=(),
         default_write_policy=ns.default_write_policy,
         local_overlay_root=ns.local_overlay_root or None,
         level_policy=effective_config.level_policy(),
         storage_uid=ns.storage_uid,
         storage_gid=ns.storage_gid,
         cold_config=effective_config.cold_storage,
+        runtime_observation_dispatchers=True,
+        observation_ready_timeout=ns.observe_ready_timeout,
+        runtime_prog=prog,
     )
+    try:
+        _start_configured_observation_dispatchers(
+            service,
+            effective_config.observation_dirs,
+            ready_timeout=ns.observe_ready_timeout,
+            prog=prog,
+        )
+    except MountdError as exc:
+        print(f"{prog}: {exc}")
+        return 2
     service.reload_registry()
     if ns.observe_mountpoint:
         if not ns.observe_root:

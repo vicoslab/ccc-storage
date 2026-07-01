@@ -5,8 +5,65 @@ import json
 import pytest
 
 from ccc_storage_core.manifest import WRITE_POLICY_LOCAL_SSD_ASYNC
-from ccc_storage_mountd.config import ConfigError, MountdConfig
+from ccc_storage_mountd import daemon as mountd_daemon
+from ccc_storage_mountd.config import ConfigError, MountdConfig, ObservationDirConfig
 from ccc_storage_mountd.daemon import main as mountd_main
+from ccc_storage_mountd.ownership import Ownership
+
+
+def test_mountd_config_parses_observation_dirs(tmp_path):
+    path = tmp_path / "mountd.toml"
+    path.write_text(
+        """
+[[observation_dirs]]
+path = "/storage/user"
+
+[[observation_dirs]]
+path = "/storage/datasets"
+state_subdir = ".ccc-alt"
+""".strip()
+        + "\n"
+    )
+
+    cfg = MountdConfig.from_file(path)
+
+    assert [item.path for item in cfg.observation_dirs] == [
+        "/storage/user",
+        "/storage/datasets",
+    ]
+    assert [item.state_subdir for item in cfg.observation_dirs] == [
+        ".ccc-storage",
+        ".ccc-alt",
+    ]
+
+
+def test_prepare_observation_dir_uses_private_source_bind(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+
+        class Result:
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr(mountd_daemon.subprocess, "run", fake_run)
+    monkeypatch.setattr(mountd_daemon, "_is_mountpoint", lambda path: False)
+    public = tmp_path / "obs"
+
+    storage = mountd_daemon._prepare_observation_storage_for_inplace_mount(
+        ObservationDirConfig(path=str(public)),
+        run_dir=tmp_path / "run",
+        ownership=Ownership(),
+    )
+
+    assert storage.public_path == public
+    assert storage.source_root != public
+    assert storage.source_root.name == "source"
+    assert storage.state_dir == storage.source_root / ".ccc-storage"
+    assert (public / ".ccc-storage" / "registry").is_dir()
+    assert calls[0] == ["mount", "--bind", str(public), str(storage.source_root)]
 
 
 def test_mountd_config_loads_modular_toml_sections(tmp_path):
