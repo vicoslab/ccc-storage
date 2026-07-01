@@ -1,17 +1,17 @@
 [Unit]
 Description=CCC layered storage mount daemon
-Documentation=file:/opt/ccc-layered-storage/deploy/README.md
+Documentation=file:/opt/ccc-storage/deploy/README.md
 After=network-online.target remote-fs.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-Environment=CCC_NFS_ROOT=/storage/.ccc-layered
-Environment=CCC_NODE_RUN_DIR=/run/ccc-layered
-Environment=CCC_MOUNTD_SOCK=/run/ccc-layered/mountd.sock
+Environment=CCC_NFS_ROOT=/storage/.ccc-storage
+Environment=CCC_NODE_RUN_DIR=/run/ccc-storage
+Environment=CCC_MOUNTD_SOCK=/run/ccc-storage/mountd.sock
 Environment=CCC_MANAGED_PARENT=/managed/datasets
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-RuntimeDirectory=ccc-layered
+RuntimeDirectory=ccc-storage
 RuntimeDirectoryMode=0755
 ExecStart=/usr/bin/env ccc-storage mountd --nfs-root ${CCC_NFS_ROOT} --run-dir ${CCC_NODE_RUN_DIR} --socket ${CCC_MOUNTD_SOCK} --managed-parent ${CCC_MANAGED_PARENT}
 Restart=on-failure

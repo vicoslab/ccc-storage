@@ -20,7 +20,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from ccc_layered_pack.builder import build_pack  # noqa: E402
+from ccc_storage_pack.builder import build_pack  # noqa: E402
 
 
 def _write_tree(root: Path, files: int, payload_bytes: int) -> None:

@@ -4,8 +4,8 @@ import subprocess
 
 import pytest
 
-from ccc_layered_pack import builder
-from ccc_layered_pack.builder import (
+from ccc_storage_pack import builder
+from ccc_storage_pack.builder import (
     BOUNDARY_MARKER_NAME,
     PackBuildError,
     build_pack,

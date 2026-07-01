@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack, dump_atomic, load_manifest
-from ccc_layered_core.protocol import Request
-from ccc_layered_mountd import daemon
-from ccc_layered_mountd.daemon import MountdService
-from ccc_layered_mountd.workers.levels import LevelPolicy, parse_levels
-from ccc_layered_pack.builder import BuildResult
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack, dump_atomic, load_manifest
+from ccc_storage_core.protocol import Request
+from ccc_storage_mountd import daemon
+from ccc_storage_mountd.daemon import MountdService
+from ccc_storage_mountd.workers.levels import LevelPolicy, parse_levels
+from ccc_storage_pack.builder import BuildResult
 
 
 def _pack(path, *, level, size, gen):
@@ -38,7 +38,7 @@ def _write_compactable_child(fake_nfs):
     dump_atomic(manifest_path, manifest)
     policy = LevelPolicy(levels=parse_levels("0:1000,1:500,2:100,3:94,4:10"))
     service = MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=fake_nfs.root / "run",
         level_policy=policy,
     )
@@ -119,7 +119,7 @@ def test_blocked_compaction_is_reported_without_mutation(fake_nfs):
     manifest_path = fake_nfs.subdir("registry") / "bar.toml"
     dump_atomic(manifest_path, manifest)
     service = MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=fake_nfs.root / "run",
         level_policy=LevelPolicy(levels=parse_levels("0:100,1:10")),
     )
@@ -149,7 +149,7 @@ def test_commit_triggers_safe_compaction_after_publish(monkeypatch, fake_nfs):
         levels=parse_levels("0:1000,1:500,2:100,3:94,4:10"),
         trigger_after_commit=True,
     )
-    service = MountdService(fake_nfs.ccc_layered, fake_nfs.root / "run", level_policy=policy)
+    service = MountdService(fake_nfs.ccc_storage, fake_nfs.root / "run", level_policy=policy)
     service.reload_registry()
     upper = service.overlay_paths(manifest).active_upper
     upper.mkdir(parents=True, exist_ok=True)

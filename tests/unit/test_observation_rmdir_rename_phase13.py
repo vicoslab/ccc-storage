@@ -5,11 +5,11 @@ import errno
 
 import pytest
 
-from ccc_layered_core.manifest import load_manifest
-from ccc_layered_core.observe import OBSERVE_MARKER_NAME
-from ccc_layered_mountd import childmount
-from ccc_layered_mountd.daemon import MountdService
-from ccc_layered_mountd.dispatcher_fuse import ObservationDispatchCore, ObservationFuseOperations
+from ccc_storage_core.manifest import load_manifest
+from ccc_storage_core.observe import OBSERVE_MARKER_NAME
+from ccc_storage_mountd import childmount
+from ccc_storage_mountd.daemon import MountdService
+from ccc_storage_mountd.dispatcher_fuse import ObservationDispatchCore, ObservationFuseOperations
 
 
 class FakeFuseError(Exception):
@@ -45,7 +45,7 @@ def _core(fake_nfs, tmp_path):
     mount_root.mkdir()
     (source / OBSERVE_MARKER_NAME).write_text("")
     service = MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=tmp_path / "run",
         observe_root=source,
     )
@@ -55,7 +55,7 @@ def _core(fake_nfs, tmp_path):
 def test_dispatch_core_rmdir_removes_clean_generation0_child(fake_nfs, tmp_path):
     source, mount_root, service, core = _core(fake_nfs, tmp_path)
     core.mkdir("user1")
-    manifest_path = fake_nfs.ccc_layered / "registry" / "observe" / "user1.toml"
+    manifest_path = fake_nfs.ccc_storage / "registry" / "observe" / "user1.toml"
     assert manifest_path.exists()
 
     removed = core.rmdir("user1")
@@ -79,9 +79,9 @@ def test_dispatch_core_rename_moves_clean_generation0_child_manifest_and_paths(f
     assert (source / "user-renamed").is_dir()
     assert not (mount_root / "user1").exists()
     assert (mount_root / "user-renamed").is_dir()
-    assert not (fake_nfs.ccc_layered / "registry" / "observe" / "user1.toml").exists()
+    assert not (fake_nfs.ccc_storage / "registry" / "observe" / "user1.toml").exists()
     manifest = load_manifest(
-        fake_nfs.ccc_layered / "registry" / "observe" / "user-renamed.toml"
+        fake_nfs.ccc_storage / "registry" / "observe" / "user-renamed.toml"
     )
     assert manifest.id == "observe:user-renamed"
 
@@ -102,7 +102,7 @@ def test_dispatch_core_rmdir_refuses_mounted_child(monkeypatch, fake_nfs, tmp_pa
 def test_dispatch_core_rename_refuses_dirty_child(fake_nfs, tmp_path):
     source, _mount_root, service, core = _core(fake_nfs, tmp_path)
     core.mkdir("user1")
-    manifest = load_manifest(fake_nfs.ccc_layered / "registry" / "observe" / "user1.toml")
+    manifest = load_manifest(fake_nfs.ccc_storage / "registry" / "observe" / "user1.toml")
     active = service.overlay_paths(manifest).active_upper
     active.mkdir(parents=True, exist_ok=True)
     (active / "dirty.txt").write_text("dirty\n")

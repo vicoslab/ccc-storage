@@ -4,10 +4,10 @@ from dataclasses import replace
 
 import pytest
 
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack, S3Info, dump_atomic
-from ccc_layered_hpc.object_store import LocalObjectStore, ObjectStoreError
-from ccc_layered_hpc.s3mirror import RecallError, mirror_committed_packs, recall_cold_pack
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack, S3Info, dump_atomic
+from ccc_storage_hpc.object_store import LocalObjectStore, ObjectStoreError
+from ccc_storage_hpc.s3mirror import RecallError, mirror_committed_packs, recall_cold_pack
 
 
 def _manifest_with_pack(tmp_path):

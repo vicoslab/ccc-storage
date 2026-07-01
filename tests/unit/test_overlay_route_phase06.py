@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from ccc_layered_core.manifest import ChildBoundary, ChildManifest
-from ccc_layered_mountd.overlay import route_path
-from ccc_layered_pack.builder import safe_pack_name
+from ccc_storage_core.manifest import ChildBoundary, ChildManifest
+from ccc_storage_mountd.overlay import route_path
+from ccc_storage_pack.builder import safe_pack_name
 
 
 def _parent() -> ChildManifest:

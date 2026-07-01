@@ -11,20 +11,20 @@ Mountd container:
 - has `SYS_ADMIN` or equivalent FUSE/mount capability
 - uses unconfined AppArmor/seccomp when required by the host FUSE setup
 - mounts the shared storage root with `rw,rshared`
-- owns the private control socket under `/run/ccc-layered`
+- owns the private control socket under `/run/ccc-storage`
 - does **not** need the Docker socket
 
 App containers:
 
 - do not get `CCC_MOUNTD_SOCK`
-- do not get `/run/ccc-layered`
+- do not get `/run/ccc-storage`
 - do not get `/dev/fuse` for layered storage
 - only need `/home` and `/storage` binds with at least `rslave` propagation
 
 ## Build image
 
 ```bash
-docker build -f deploy/docker/mountd.Dockerfile -t ccc-layered-storage-mountd:local .
+docker build -f deploy/docker/mountd.Dockerfile -t ccc-storage-mountd:local .
 ```
 
 ## Development smoke topology
@@ -33,7 +33,7 @@ A repository checkout includes a development-only Docker/FUSE smoke for this
 mountd/app-container topology:
 
 ```bash
-CCC_MOUNTD_IMAGE=ccc-layered-storage-mountd:local \
+CCC_MOUNTD_IMAGE=ccc-storage-mountd:local \
 dev/validation/docker/mountd-container-runtime-smoke.sh
 ```
 
@@ -45,7 +45,7 @@ published layered folder, commits, remounts, and reads the committed data. See
 ## Important mountd flags
 
 - `--socket-mode 0600`: private control socket by default.
-- `--ready-file /run/ccc-layered/ready.json`: doctor JSON written after socket readiness.
+- `--ready-file /run/ccc-storage/ready.json`: doctor JSON written after socket readiness.
 - `--observe-ready-timeout 10`: fail startup if the observation FUSE mount is not ready.
 - `--idle-unmount-ttl 300`: clean up idle child mounts.
 - `--idle-reap-interval 30`: cleanup interval.

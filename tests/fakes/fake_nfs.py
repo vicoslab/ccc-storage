@@ -1,4 +1,4 @@
-"""Fake-NFS — a workspace dir laid out as ``/storage/.ccc-layered``.
+"""Fake-NFS — a workspace dir laid out as ``/storage/.ccc-storage``.
 
 Because the workspace is itself NFS-backed, this gives realistic close-to-open
 semantics, real ``O_EXCL`` atomicity, and real rename atomicity for free,
@@ -22,12 +22,12 @@ class FakeNfs:
     """A single fake shared-NFS tree."""
 
     root: Path
-    ccc_layered: Path
+    ccc_storage: Path
 
     def subdir(self, name: str) -> Path:
         if name not in SUBDIRS:
-            raise KeyError(f"unknown .ccc-layered subdir: {name!r}")
-        return self.ccc_layered / name
+            raise KeyError(f"unknown .ccc-storage subdir: {name!r}")
+        return self.ccc_storage / name
 
     def cleanup(self) -> None:
         shutil.rmtree(self.root, ignore_errors=True)
@@ -38,7 +38,7 @@ def create_fake_nfs(test_root: str | Path) -> FakeNfs:
     base = Path(test_root) / "fake-nfs"
     base.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(dir=base, prefix="nfs-"))
-    ccc_layered = root / ".ccc-layered"
+    ccc_storage = root / ".ccc-storage"
     for name in SUBDIRS:
-        (ccc_layered / name).mkdir(parents=True, exist_ok=True)
-    return FakeNfs(root=root, ccc_layered=ccc_layered)
+        (ccc_storage / name).mkdir(parents=True, exist_ok=True)
+    return FakeNfs(root=root, ccc_storage=ccc_storage)

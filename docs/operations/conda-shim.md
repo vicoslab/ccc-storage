@@ -14,7 +14,7 @@ They are safe to install in CCC images because they pass through to real
 
 The wrapper runs the real tool unchanged when:
 
-- `CCC_LAYERED_SHIM_DISABLE=1`
+- `CCC_STORAGE_SHIM_DISABLE=1`
 - the command is read-only, such as `list`, `info`, `search`, `config`, or `run`
 - no managed env selector is available
 - `CCC_NFS_ROOT` is not configured
@@ -39,7 +39,7 @@ Covered mutating commands initially:
 
 Selector discovery order:
 
-1. `CCC_LAYERED_ENV_SELECTOR`
+1. `CCC_STORAGE_ENV_SELECTOR`
 2. `-n/--name`
 3. `-p/--prefix`
 4. `CONDA_PREFIX` basename
@@ -53,7 +53,7 @@ returns the real command exit code.  Lock contention returns `75` (`EX_TEMPFAIL`
 ccc-storage init-conda-envs /storage/user/layered-source/conda/envs
 ```
 
-This creates the `CCC_LAYERED_OBSERVE` marker so mountd can treat immediate child
+This creates the `CCC_STORAGE_OBSERVE` marker so mountd can treat immediate child
 folders as independently committed layered envs.
 
 ## Optional transparent use

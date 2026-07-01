@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack, dump_atomic, load_manifest
-from ccc_layered_mountd import daemon
-from ccc_layered_mountd.daemon import MountdService
-from ccc_layered_mountd.workers.levels import LevelPolicy, parse_levels
-from ccc_layered_pack.builder import BuildResult
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack, dump_atomic, load_manifest
+from ccc_storage_mountd import daemon
+from ccc_storage_mountd.daemon import MountdService
+from ccc_storage_mountd.workers.levels import LevelPolicy, parse_levels
+from ccc_storage_pack.builder import BuildResult
 
 
 def test_commit_assigns_delta_level_and_generation_metadata(monkeypatch, fake_nfs):
@@ -24,7 +24,7 @@ def test_commit_assigns_delta_level_and_generation_metadata(monkeypatch, fake_nf
     dump_atomic(manifest_path, manifest)
     policy = LevelPolicy(levels=parse_levels("0:1M,1:10K,2:10"))
     service = MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=fake_nfs.root / "run",
         level_policy=policy,
     )

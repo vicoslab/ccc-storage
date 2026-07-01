@@ -11,9 +11,9 @@ set -euo pipefail
 #   - local write throughput beats shared-NFS dirty writes by a large margin
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-image_tag="${CCC_MOUNTD_IMAGE:-ccc-layered-storage-mountd:local}"
+image_tag="${CCC_MOUNTD_IMAGE:-ccc-storage-mountd:local}"
 app_image="${CCC_APP_IMAGE:-$image_tag}"
-runtime_root="${CCC_RUNTIME_ROOT:-/storage/user/ccc-layered-storage-write-policy-test}"
+runtime_root="${CCC_RUNTIME_ROOT:-/storage/user/ccc-storage-write-policy-test}"
 local_ssd_root="${CCC_LOCAL_SSD_ROOT:-$runtime_root/local-ssd}"
 run_id="${CCC_RUNTIME_RUN_ID:-$(hostname)-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 run_root="$runtime_root/runs/$run_id"
@@ -28,10 +28,10 @@ files="${CCC_WRITE_POLICY_FILES:-2000}"
 size_kib="${CCC_WRITE_POLICY_SIZE_KIB:-32}"
 min_local_fps="${CCC_WRITE_POLICY_MIN_LOCAL_FPS:-4000}"
 min_speedup="${CCC_WRITE_POLICY_MIN_SPEEDUP:-5}"
-writer_name="ccc-layered-policy-writer-$run_id"
-reader_name="ccc-layered-policy-reader-$run_id"
-app_name="ccc-layered-policy-app-$run_id"
-reader_app_name="ccc-layered-policy-reader-app-$run_id"
+writer_name="ccc-storage-policy-writer-$run_id"
+reader_name="ccc-storage-policy-reader-$run_id"
+app_name="ccc-storage-policy-app-$run_id"
+reader_app_name="ccc-storage-policy-reader-app-$run_id"
 
 docker_bin="${DOCKER:-docker}"
 
@@ -51,7 +51,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$run_root"/{nfs,source,published-writer,published-reader,results} "$ssd_run_root"
-touch "$run_root/source/CCC_LAYERED_OBSERVE"
+touch "$run_root/source/CCC_STORAGE_OBSERVE"
 
 if [ "$skip_build" != "1" ]; then
   "$docker_bin" build -f "$repo_root/deploy/docker/mountd.Dockerfile" -t "$image_tag" "$repo_root"
@@ -106,8 +106,8 @@ start_mountd() {
     --mount type=bind,src="$docker_run_root",dst=/ccc-runtime,bind-propagation=rshared \
     --mount type=bind,src="$docker_ssd_run_root",dst=/ccc-ssd,bind-propagation=rshared \
     -e CCC_NFS_ROOT=/ccc-runtime/nfs \
-    -e CCC_NODE_RUN_DIR=/run/ccc-layered \
-    -e CCC_MOUNTD_SOCK=/run/ccc-layered/mountd.sock \
+    -e CCC_NODE_RUN_DIR=/run/ccc-storage \
+    -e CCC_MOUNTD_SOCK=/run/ccc-storage/mountd.sock \
     -e CCC_OBSERVE_ROOT=/ccc-runtime/source \
     -e CCC_OBSERVE_MOUNTPOINT="/ccc-runtime/$published" \
     -e CCC_LOCAL_OVERLAY_ROOT="/ccc-ssd/$ssd_suffix" \
@@ -187,8 +187,8 @@ if [ ! -e "$run_root/nfs/overlays/observe%3Ashared-env/active/class_000/img_0000
 fi
 
 # Local child: create manifest, switch policy before first mount, then app access mounts it.
-"$docker_bin" exec "$writer_name" ccc-storage observe-mkdir local-env --json >/tmp/ccc-layered-local-create.json
-"$docker_bin" exec "$writer_name" ccc-storage write-policy observe:local-env local-ssd-async --json >/tmp/ccc-layered-local-policy.json
+"$docker_bin" exec "$writer_name" ccc-storage observe-mkdir local-env --json >/tmp/ccc-storage-local-create.json
+"$docker_bin" exec "$writer_name" ccc-storage write-policy observe:local-env local-ssd-async --json >/tmp/ccc-storage-local-policy.json
 "$docker_bin" exec "$app_name" sh -lc 'ls -la /storage/layered/local-env >/dev/null'
 wait_for_mount "$app_name" /storage/layered/local-env
 local_fs="$($docker_bin exec "$app_name" sh -lc 'findmnt -T /storage/layered/local-env -no FSTYPE')"
@@ -205,7 +205,7 @@ if [ -e "$run_root/nfs/overlays/observe%3Alocal-env/active/class_000/img_000000.
   exit 1
 fi
 
-"$docker_bin" exec "$writer_name" ccc-storage publish observe:local-env --json >/tmp/ccc-layered-local-publish.json
+"$docker_bin" exec "$writer_name" ccc-storage publish observe:local-env --json >/tmp/ccc-storage-local-publish.json
 "$docker_bin" exec "$writer_name" sh -lc 'test -e /ccc-runtime/nfs/async/observe%3Alocal-env/current/class_000/img_000000.jpg' || {
   echo "local async publish did not create NFS mirror" >&2
   exit 1
@@ -221,8 +221,8 @@ reader_fs="$($docker_bin exec "$reader_app_name" sh -lc 'findmnt -T /storage/lay
 case "$reader_fs" in none|overlay) echo "reader unexpectedly got writer-like fs: $reader_fs" >&2; exit 1 ;; *) ;; esac
 
 # Commit after draining writer mount, then verify committed read works through writer app.
-"$docker_bin" exec "$writer_name" ccc-storage umount observe:local-env --json >/tmp/ccc-layered-local-umount.json
-"$docker_bin" exec "$writer_name" ccc-storage commit observe:local-env --json >/tmp/ccc-layered-local-commit.json
+"$docker_bin" exec "$writer_name" ccc-storage umount observe:local-env --json >/tmp/ccc-storage-local-umount.json
+"$docker_bin" exec "$writer_name" ccc-storage commit observe:local-env --json >/tmp/ccc-storage-local-commit.json
 "$docker_bin" exec "$app_name" sh -lc 'ls -la /storage/layered/local-env >/dev/null 2>&1 || true'
 wait_for_mount "$app_name" /storage/layered/local-env
 "$docker_bin" exec "$app_name" sh -lc 'test -s /storage/layered/local-env/class_000/img_000000.jpg'
@@ -239,7 +239,7 @@ shared_fps = float(shared['write_files_per_second'])
 speedup = local_fps / shared_fps if shared_fps else 999.0
 if local_fps < min_local and speedup < min_speedup:
     raise SystemExit(f"local write too slow: {local_fps:.2f} files/s, speedup {speedup:.2f}x over shared {shared_fps:.2f}")
-commit = json.loads(Path('/tmp/ccc-layered-local-commit.json').read_text())
+commit = json.loads(Path('/tmp/ccc-storage-local-commit.json').read_text())
 if commit['generation'] != 1 or len(commit['packs']) != 1:
     raise SystemExit(f"unexpected commit JSON: {commit}")
 result = {

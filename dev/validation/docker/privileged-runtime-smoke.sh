@@ -5,14 +5,14 @@ set -euo pipefail
 #
 # Environment:
 #   CCC_RUNTIME_ROOT            Base scratch root (default:
-#                               /storage/user/ccc-layered-storage-runtime-test)
+#                               /storage/user/ccc-storage-runtime-test)
 #   CCC_RUNTIME_DOCKER_SOURCE_ROOT
 #                               Docker-daemon-visible alias for CCC_RUNTIME_ROOT
 #                               (default: resolved CCC_RUNTIME_ROOT)
 #   CCC_CLIENT_CONTAINERS       Space-separated existing Docker containers to
 #                               exec as runtime clients (default: domen-cuda10)
 #   CCC_DOCKER_TAG              Local image tag to build/use (default:
-#                               ccc-layered-storage:priv-runtime-local)
+#                               ccc-storage:priv-runtime-local)
 #   CCC_SKIP_BUILD              Set to 1 to skip docker build
 #   CCC_RUNTIME_KEEP            Set to 1 to keep the per-run root
 #   CCC_ALLOW_PROPAGATION_SKIP  Set to 1 to skip host propagation failure
@@ -29,8 +29,8 @@ if [ -z "$python_bin" ]; then
     python_bin="python"
   fi
 fi
-tag="${CCC_DOCKER_TAG:-ccc-layered-storage:priv-runtime-local}"
-runtime_root_input="${CCC_RUNTIME_ROOT:-/storage/user/ccc-layered-storage-runtime-test}"
+tag="${CCC_DOCKER_TAG:-ccc-storage:priv-runtime-local}"
+runtime_root_input="${CCC_RUNTIME_ROOT:-/storage/user/ccc-storage-runtime-test}"
 runtime_docker_source_root_was_set=0
 if [ "${CCC_RUNTIME_DOCKER_SOURCE_ROOT+x}" = "x" ]; then
   if [ -z "$CCC_RUNTIME_DOCKER_SOURCE_ROOT" ]; then

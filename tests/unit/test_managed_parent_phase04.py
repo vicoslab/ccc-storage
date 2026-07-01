@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from ccc_layered_core.manifest import (
+from ccc_storage_core.manifest import (
     ChildManifest,
     OverlayInfo,
     PackInfo,
@@ -13,16 +13,16 @@ from ccc_layered_core.manifest import (
     dump_atomic,
     load_manifest,
 )
-from ccc_layered_mountd import childmount
-from ccc_layered_mountd.childmount import ChildMountManager
-from ccc_layered_mountd.managed_parent import (
+from ccc_storage_mountd import childmount
+from ccc_storage_mountd.childmount import ChildMountManager
+from ccc_storage_mountd.managed_parent import (
     ChildExistsError,
     ChildNotEmptyError,
     ChildNotFoundError,
     ManagedParent,
     ManagedParentError,
 )
-from ccc_layered_mountd.overlay import OverlayPaths
+from ccc_storage_mountd.overlay import OverlayPaths
 
 
 @dataclass
@@ -37,7 +37,7 @@ class FakeHandle:
 
 def _parent(fake_nfs, tmp_path, mounts=None) -> ManagedParent:
     return ManagedParent(
-        fake_nfs.ccc_layered,
+        fake_nfs.ccc_storage,
         tmp_path / "run",
         parent_path="/managed/dataset",
         mounts=mounts,
@@ -50,7 +50,7 @@ def test_list_children_hides_markers_and_lists_manifest_children(fake_nfs, tmp_p
     mp.create_child("bar")
 
     # Internal junk dropped into the children dir must not show up in listings.
-    (mp.children_dir / ".ccc-layered").write_text("marker")
+    (mp.children_dir / ".ccc-storage").write_text("marker")
     (mp.children_dir / ".foo.toml.tmp").write_text("half-written")
 
     assert mp.list_children() == ["bar", "foo"]
@@ -70,7 +70,7 @@ def test_create_child_is_atomic_and_initializes_overlay(fake_nfs, tmp_path):
     assert manifest.pack_stack.lowers == ()
     assert manifest.overlay.mode == "shared-overlay"
 
-    upper = OverlayPaths.for_child(fake_nfs.ccc_layered / "overlays", manifest.id).active_upper
+    upper = OverlayPaths.for_child(fake_nfs.ccc_storage / "overlays", manifest.id).active_upper
     assert upper.is_dir()
 
     with pytest.raises(ChildExistsError):
@@ -139,7 +139,7 @@ def test_rmdir_removes_empty_gen0_child(fake_nfs, tmp_path):
     mp = _parent(fake_nfs, tmp_path)
     mp.create_child("foo")
     manifest = load_manifest(mp.manifest_path("foo"))
-    overlay_root = OverlayPaths.for_child(fake_nfs.ccc_layered / "overlays", manifest.id).root
+    overlay_root = OverlayPaths.for_child(fake_nfs.ccc_storage / "overlays", manifest.id).root
 
     mp.remove_child("foo")
     assert not mp.manifest_path("foo").exists()
@@ -171,7 +171,7 @@ def test_rmdir_refuses_nonempty_overlay(fake_nfs, tmp_path):
     mp = _parent(fake_nfs, tmp_path)
     mp.create_child("dirty")
     manifest = load_manifest(mp.manifest_path("dirty"))
-    upper = OverlayPaths.for_child(fake_nfs.ccc_layered / "overlays", manifest.id).active_upper
+    upper = OverlayPaths.for_child(fake_nfs.ccc_storage / "overlays", manifest.id).active_upper
     (upper / "scratch.txt").write_text("dirty data")
 
     with pytest.raises(ChildNotEmptyError):

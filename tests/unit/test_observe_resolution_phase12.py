@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ccc_layered_core.observe import (
+from ccc_storage_core.observe import (
     OBSERVE_MARKER_NAME,
     discover_observation_roots,
     immediate_child_boundaries,

@@ -1,6 +1,6 @@
 # CLI tools reference
 
-`ccc-layered-storage` exposes one public executable:
+`ccc-storage` exposes one public executable:
 
 ```bash
 ccc-storage <command> [args...]
@@ -46,7 +46,7 @@ Captured command: `PYTHONPATH=src python -m ccc_storage.main --help`
 ```text
 usage: ccc-storage [-h] [--version] {pack,mountd,hpc,conda,mamba,benchmark,doctor,status,mount,mount-tree,umount,publish,commit,compact,pin,write-policy,ls,parent-ls,create,rmdir,access,observe-ls,observe-mkdir,observe-access,rename,env-txn,env-status,init-conda-envs,import,hpc-export} ...
 
-Unified CCC layered-storage CLI.
+Unified CCC storage CLI.
 
 options:
   -h, --help   show this help message and exit
@@ -89,7 +89,7 @@ control operations through mountd:
 examples:
   ccc-storage doctor
   ccc-storage pack build SRC OUT.sqfs
-  ccc-storage mountd --nfs-root /storage/.ccc-layered --run-dir /run/ccc-layered
+  ccc-storage mountd --nfs-root /storage/.ccc-storage --run-dir /run/ccc-storage
   ccc-storage conda install -n env numpy
 
 Use `ccc-storage <command> --help` for command-specific options.
@@ -157,7 +157,7 @@ options:
                         managed parent path whose children this node serves
                         (e.g. /managed/dataset)
   --observe-root OBSERVE_ROOT
-                        source tree whose CCC_LAYERED_OBSERVE markers define
+                        source tree whose CCC_STORAGE_OBSERVE markers define
                         observed children
   --observe-mountpoint OBSERVE_MOUNTPOINT
                         mount a live pyfuse3 observation dispatcher at this

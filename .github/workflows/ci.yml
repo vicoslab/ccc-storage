@@ -56,8 +56,8 @@ jobs:
       - name: Unit tests with coverage gate
         run: >-
           python -m pytest tests/unit
-          --cov=src/ccc_layered_core
-          --cov=src/ccc_layered_pack
+          --cov=src/ccc_storage_core
+          --cov=src/ccc_storage_pack
           --cov-report=term-missing
           --cov-fail-under=85
 
@@ -173,7 +173,7 @@ jobs:
             echo 'skip with reason: Docker daemon unavailable'
             exit 0
           fi
-          docker build -f dev/docker/test.Dockerfile -t ccc-layered-storage:test .
+          docker build -f dev/docker/test.Dockerfile -t ccc-storage:test .
 
   real-s3:
     name: conditional real-S3 lane

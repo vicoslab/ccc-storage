@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 python_bin="${PYTHON:-python}"
 
-default_root="${TMPDIR:-/tmp}/ccc-layered-runtime-smoke.$$"
+default_root="${TMPDIR:-/tmp}/ccc-storage-runtime-smoke.$$"
 smoke_root="${CCC_SMOKE_ROOT:-$default_root}"
 
 resolve_path() {
@@ -27,7 +27,7 @@ case "$smoke_real" in
     ;;
 esac
 
-nfs_root="$smoke_real/nfs/.ccc-layered"
+nfs_root="$smoke_real/nfs/.ccc-storage"
 run_dir="$smoke_real/run"
 parent_path="$smoke_real/managed/datasets"
 socket_path="$run_dir/mountd.sock"
@@ -54,7 +54,7 @@ export CCC_NFS_ROOT="$nfs_root"
 export CCC_NODE_RUN_DIR="$run_dir"
 export CCC_MOUNTD_SOCK="$socket_path"
 
-"$python_bin" -m ccc_layered_mountd.daemon \
+"$python_bin" -m ccc_storage_mountd.daemon \
   --nfs-root "$nfs_root" \
   --run-dir "$run_dir" \
   --socket "$socket_path" \
@@ -78,8 +78,8 @@ if [ ! -S "$socket_path" ]; then
   exit 1
 fi
 
-"$python_bin" -m ccc_layered_cli.main doctor --json >/dev/null
-"$python_bin" -m ccc_layered_cli.main create smoke-child --json >/dev/null
-"$python_bin" -m ccc_layered_cli.main parent-ls --json | grep -q '"smoke-child"'
+"$python_bin" -m ccc_storage_cli.main doctor --json >/dev/null
+"$python_bin" -m ccc_storage_cli.main create smoke-child --json >/dev/null
+"$python_bin" -m ccc_storage_cli.main parent-ls --json | grep -q '"smoke-child"'
 
 echo "runtime smoke passed"

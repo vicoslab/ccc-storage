@@ -24,8 +24,8 @@ if [ -z "$python_bin" ]; then
   fi
 fi
 
-tag="${CCC_DOCKER_TAG:-ccc-layered-storage:observation-fuse-runtime-local}"
-runtime_root_input="${CCC_RUNTIME_ROOT:-/storage/user/ccc-layered-storage-observation-fuse-test}"
+tag="${CCC_DOCKER_TAG:-ccc-storage:observation-fuse-runtime-local}"
+runtime_root_input="${CCC_RUNTIME_ROOT:-/storage/user/ccc-storage-observation-fuse-test}"
 runtime_docker_source_root_input="${CCC_RUNTIME_DOCKER_SOURCE_ROOT:-}"
 
 resolve_path() {
@@ -168,7 +168,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$nfs/registry" "$nfs/packs" "$nfs/overlays" "$nfs/locks" "$run" "$source" "$published"
-printf '' >"$source/CCC_LAYERED_OBSERVE"
+printf '' >"$source/CCC_STORAGE_OBSERVE"
 
 python - <<'PY'
 import pyfuse3  # noqa: F401

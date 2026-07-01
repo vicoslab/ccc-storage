@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from ccc_layered_mountd.workers.policy import (
+from ccc_storage_mountd.workers.policy import (
     MANUAL,
     NOOP,
     TRIGGER,

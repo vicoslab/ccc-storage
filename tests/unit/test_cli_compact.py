@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from ccc_layered_cli import main as cli
+from ccc_storage_cli import main as cli
 
 
 def test_cli_compact_dispatches_dry_run_allow_base_json(monkeypatch, capsys):

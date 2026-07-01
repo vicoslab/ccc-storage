@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ccc_layered_hpc.object_store import Boto3ObjectStore, ObjectStoreError
+from ccc_storage_hpc.object_store import Boto3ObjectStore, ObjectStoreError
 
 
 class FakeClientError(Exception):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ccc_layered_core.manifest import (
+from ccc_storage_core.manifest import (
     WRITE_POLICY_LOCAL_SSD_ASYNC,
     WRITE_POLICY_SHARED_NFS,
     ChildManifest,

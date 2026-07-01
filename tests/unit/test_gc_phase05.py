@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack
-from ccc_layered_mountd.workers.gc import plan_gc
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack
+from ccc_storage_mountd.workers.gc import plan_gc
 
 
 def _manifest(*, pinned=False):

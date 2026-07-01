@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ccc_layered_core.manifest import (
+from ccc_storage_core.manifest import (
     ChildManifest,
     PackInfo,
     PackStack,

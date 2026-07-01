@@ -11,10 +11,10 @@ set -euo pipefail
 #
 # Environment:
 #   CCC_RUNTIME_ROOT                Base scratch root (default:
-#                                   /storage/user/ccc-layered-storage-nested-test)
+#                                   /storage/user/ccc-storage-nested-test)
 #   CCC_RUNTIME_DOCKER_SOURCE_ROOT  Docker-daemon-visible alias for runtime root
 #   CCC_DOCKER_TAG                  Local image tag (default:
-#                                   ccc-layered-storage:nested-runtime-local)
+#                                   ccc-storage:nested-runtime-local)
 #   CCC_SKIP_BUILD                  Set to 1 to skip docker build
 #   CCC_RUNTIME_KEEP                Set to 1 to keep per-run root
 
@@ -30,8 +30,8 @@ if [ -z "$python_bin" ]; then
     python_bin="python"
   fi
 fi
-tag="${CCC_DOCKER_TAG:-ccc-layered-storage:nested-runtime-local}"
-runtime_root_input="${CCC_RUNTIME_ROOT:-/storage/user/ccc-layered-storage-nested-test}"
+tag="${CCC_DOCKER_TAG:-ccc-storage:nested-runtime-local}"
+runtime_root_input="${CCC_RUNTIME_ROOT:-/storage/user/ccc-storage-nested-test}"
 if [ "${CCC_RUNTIME_DOCKER_SOURCE_ROOT+x}" = "x" ]; then
   runtime_docker_source_root_input="$CCC_RUNTIME_DOCKER_SOURCE_ROOT"
 else
@@ -149,20 +149,20 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ccc_layered_core.manifest import (
+from ccc_storage_core.manifest import (
     ChildBoundary,
     ChildManifest,
     PackStack,
     dump_atomic,
 )
-from ccc_layered_mountd.control import ControlServer
-from ccc_layered_mountd.daemon import MountdService
-from ccc_layered_pack.builder import (
+from ccc_storage_mountd.control import ControlServer
+from ccc_storage_mountd.daemon import MountdService
+from ccc_storage_pack.builder import (
     BOUNDARY_MARKER_NAME,
     build_pack,
     pack_object_dir,
 )
-from ccc_layered_pack.reader import extract
+from ccc_storage_pack.reader import extract
 
 root = Path('/ccc-runtime')
 nfs = root / 'nfs'

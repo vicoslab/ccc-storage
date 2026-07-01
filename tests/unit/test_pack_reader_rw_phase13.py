@@ -4,9 +4,9 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from ccc_layered_core.manifest import PackInfo
-from ccc_layered_mountd.overlay import OverlayPaths
-from ccc_layered_pack import reader
+from ccc_storage_core.manifest import PackInfo
+from ccc_storage_mountd.overlay import OverlayPaths
+from ccc_storage_pack import reader
 
 
 def _which(name: str) -> str | None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 
-from ccc_layered_core.checksum import sha256_file
+from ccc_storage_core.checksum import sha256_file
 
 
 def test_sha256_file_streams_file_contents(tmp_path):

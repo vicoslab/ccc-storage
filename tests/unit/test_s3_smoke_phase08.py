@@ -14,7 +14,7 @@ def test_s3_smoke_script_exists_and_is_executable():
 
 def test_s3_smoke_uses_ceph_defaults_and_s3v4_auto_style():
     text = S3_SMOKE.read_text()
-    object_store = (ROOT / "src" / "ccc_layered_hpc" / "object_store.py").read_text()
+    object_store = (ROOT / "src" / "ccc_storage_hpc" / "object_store.py").read_text()
     assert "https://ceph-7.fri.uni-lj.si" in text
     assert "CCC_S3_ADDRESSING_STYLE:-auto" in text
     assert "signature_version" in object_store

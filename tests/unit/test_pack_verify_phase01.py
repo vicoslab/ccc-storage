@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ccc_layered_pack.verify import VerificationError, inspect_pack, verify_pack
+from ccc_storage_pack.verify import VerificationError, inspect_pack, verify_pack
 
 
 def test_inspect_and_verify_pack_bytes(tmp_path):

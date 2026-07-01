@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import subprocess
 
-from ccc_layered_core.observe import OBSERVE_MARKER_NAME, immediate_child_boundaries
-from ccc_layered_mountd.overlay import OverlayPaths
-from ccc_layered_pack import builder
-from ccc_layered_pack.builder import (
+from ccc_storage_core.observe import OBSERVE_MARKER_NAME, immediate_child_boundaries
+from ccc_storage_mountd.overlay import OverlayPaths
+from ccc_storage_pack import builder
+from ccc_storage_pack.builder import (
     BOUNDARY_MARKER_NAME,
     build_pack,
     pack_object_dir,

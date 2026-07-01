@@ -4,8 +4,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from ccc_layered_mountd.overlay import LocalOverlayPaths
-from ccc_layered_pack import reader
+from ccc_storage_mountd.overlay import LocalOverlayPaths
+from ccc_storage_pack import reader
 
 
 @dataclass

@@ -15,24 +15,24 @@ import argparse
 
 import pytest
 
-from ccc_layered_cli import env as env_cli
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import (
+from ccc_storage_cli import env as env_cli
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import (
     ChildManifest,
     PackInfo,
     PackStack,
     dump_atomic,
     load_manifest,
 )
-from ccc_layered_mountd import daemon
-from ccc_layered_mountd.daemon import MountdService, _safe_child_name
-from ccc_layered_mountd.env_txn import (
+from ccc_storage_mountd import daemon
+from ccc_storage_mountd.daemon import MountdService, _safe_child_name
+from ccc_storage_mountd.env_txn import (
     CommandResult,
     EnvTransaction,
     EnvUpdateContext,
     env_status,
 )
-from ccc_layered_pack.builder import BuildResult
+from ccc_storage_pack.builder import BuildResult
 
 
 def _fake_build_delta(src, base_manifest, out, tombstones=None):
@@ -61,13 +61,13 @@ def _write_env(fake_nfs, *, name="myenv", generation=2):
     )
     manifest_path = fake_nfs.subdir("registry") / f"{name}.toml"
     dump_atomic(manifest_path, manifest)
-    service = MountdService(nfs_root=fake_nfs.ccc_layered, run_dir=fake_nfs.root / "run")
+    service = MountdService(nfs_root=fake_nfs.ccc_storage, run_dir=fake_nfs.root / "run")
     service.reload_registry()
     return service, manifest, manifest_path
 
 
 def _update_lock_path(fake_nfs, manifest):
-    return fake_nfs.ccc_layered / "locks" / f"{_safe_child_name(manifest.id)}.update.lock"
+    return fake_nfs.ccc_storage / "locks" / f"{_safe_child_name(manifest.id)}.update.lock"
 
 
 # --- lock lifecycle ---------------------------------------------------------

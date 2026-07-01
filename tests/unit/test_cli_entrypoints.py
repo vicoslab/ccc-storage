@@ -11,14 +11,14 @@ import pytest
 import tomllib
 from pathlib import Path
 
-from ccc_layered_cli import __version__ as cli_version
-from ccc_layered_cli.main import main as cli_main
-from ccc_layered_hpc import __version__ as hpc_version
-from ccc_layered_hpc.client import main as hpc_main
-from ccc_layered_mountd import __version__ as mountd_version
-from ccc_layered_mountd.daemon import main as mountd_main
-from ccc_layered_pack import __version__ as pack_version
-from ccc_layered_pack.cli import main as pack_main
+from ccc_storage_cli import __version__ as cli_version
+from ccc_storage_cli.main import main as cli_main
+from ccc_storage_hpc import __version__ as hpc_version
+from ccc_storage_hpc.client import main as hpc_main
+from ccc_storage_mountd import __version__ as mountd_version
+from ccc_storage_mountd.daemon import main as mountd_main
+from ccc_storage_pack import __version__ as pack_version
+from ccc_storage_pack.cli import main as pack_main
 from ccc_storage.main import main as storage_main
 
 ROOT = Path(__file__).resolve().parents[2]

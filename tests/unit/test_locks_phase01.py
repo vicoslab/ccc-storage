@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from ccc_layered_core.locks import LockHeld, LockInfo, NFSLock
+from ccc_storage_core.locks import LockHeld, LockInfo, NFSLock
 
 
 def test_lockfile_acquire_writes_holder_metadata_and_release_removes_file(tmp_path):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ccc_layered_hpc.client import main
+from ccc_storage_hpc.client import main
 
 
 def test_hpc_client_status_stub_is_explicit(capsys):

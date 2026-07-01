@@ -23,8 +23,8 @@ def test_ci_workflow_has_always_on_and_conditional_lanes():
 
 def test_ci_enforces_core_pack_coverage_gate():
     text = CI.read_text()
-    assert "--cov=src/ccc_layered_core" in text
-    assert "--cov=src/ccc_layered_pack" in text
+    assert "--cov=src/ccc_storage_core" in text
+    assert "--cov=src/ccc_storage_pack" in text
     assert "--cov-fail-under=85" in text
 
 
@@ -90,28 +90,28 @@ def test_deploy_artifacts_exist_and_are_safe_defaults():
     assert "s3-cold-hpc-smoke.sh" in prereq_text
     assert "nested-runtime-smoke.sh" in prereq_text
     assert "observation-runtime-smoke.sh" in prereq_text
-    assert "ccc_layered_observe" in prereq_text
+    assert "ccc_storage_observe" in prereq_text
     assert "ceph-7.fri.uni-lj.si" in prereq_text
     assert "ccc_allow_fuse_skip" in prereq_text
 
     smoke_text = smoke.read_text()
-    assert "/storage/.ccc-layered" not in smoke_text
-    assert "ccc_layered_mountd.daemon" in smoke_text
-    assert "ccc_layered_cli.main" in smoke_text
+    assert "/storage/.ccc-storage" not in smoke_text
+    assert "ccc_storage_mountd.daemon" in smoke_text
+    assert "ccc_storage_cli.main" in smoke_text
 
     fuse_text = fuse_smoke.read_text()
-    assert "/storage/.ccc-layered" not in fuse_text
-    assert "ccc_layered_pack.cli build" in fuse_text
-    assert "ccc_layered_pack.cli verify" in fuse_text
+    assert "/storage/.ccc-storage" not in fuse_text
+    assert "ccc_storage_pack.cli build" in fuse_text
+    assert "ccc_storage_pack.cli verify" in fuse_text
     assert "unsquashfs" in fuse_text
     assert "squashfuse" in fuse_text
     assert "CCC_ALLOW_FUSE_SKIP" in fuse_text
     assert "ccc-fuse-sidecar" in fuse_text or "fusermount3 sidecar" in fuse_text
-    assert ".scratch/ccc-layered-fuse-smoke" in fuse_text
+    assert ".scratch/ccc-storage-fuse-smoke" in fuse_text
     assert "skip with reason" in fuse_text
 
     docker_text = docker_smoke.read_text()
-    assert "/storage/.ccc-layered" not in docker_text
+    assert "/storage/.ccc-storage" not in docker_text
     assert "docker" in docker_text
     assert "--device /dev/fuse" in docker_text
     assert "--cap-add SYS_ADMIN" in docker_text
@@ -125,7 +125,7 @@ def test_dockerfile_is_optional_test_image_only():
     dockerfile = ROOT / "dev" / "docker" / "test.Dockerfile"
     text = dockerfile.read_text()
     pyproject = (ROOT / "pyproject.toml").read_text()
-    assert "ccc-layered-storage" in text
+    assert "ccc-storage" in text
     assert "make test" in text
     assert ".[dev,manifest,s3,fuse]" in text
     assert "pyfuse3" in pyproject

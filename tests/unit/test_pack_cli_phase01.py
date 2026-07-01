@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import ChildManifest, PackInfo, dump_atomic
-from ccc_layered_pack import cli
-from ccc_layered_pack.builder import BuildResult
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import ChildManifest, PackInfo, dump_atomic
+from ccc_storage_pack import cli
+from ccc_storage_pack.builder import BuildResult
 
 
 def test_manifest_show_cli_outputs_json(tmp_path, capsys):

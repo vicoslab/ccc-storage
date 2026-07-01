@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from ccc_layered_core.protocol import Request
-from ccc_layered_mountd.daemon import MountdService
+from ccc_storage_core.protocol import Request
+from ccc_storage_mountd.daemon import MountdService
 
 
 def _service(fake_nfs, tmp_path) -> MountdService:
     return MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=tmp_path / "run",
         managed_parent="/managed/dataset",
     )
@@ -45,7 +45,7 @@ def test_dispatch_duplicate_create_returns_eexist(fake_nfs, tmp_path):
 
 
 def test_dispatch_managed_parent_commands_require_configured_parent(fake_nfs, tmp_path):
-    service = MountdService(nfs_root=fake_nfs.ccc_layered, run_dir=tmp_path / "run")
+    service = MountdService(nfs_root=fake_nfs.ccc_storage, run_dir=tmp_path / "run")
     resp = service.dispatch(Request(command="create", path="foo"))
     assert resp.ok is False
     assert resp.code == "EPROTO"

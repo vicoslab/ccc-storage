@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import tarfile
 
-from ccc_layered_pack.bundle import BundleEntry, create_tar_bundle
+from ccc_storage_pack.bundle import BundleEntry, create_tar_bundle
 
 
 def test_create_tar_bundle_contains_manifest_and_entries(tmp_path):

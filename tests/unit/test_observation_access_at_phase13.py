@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from ccc_layered_core.observe import OBSERVE_MARKER_NAME
-from ccc_layered_mountd import childmount
-from ccc_layered_mountd.daemon import MountdService
+from ccc_storage_core.observe import OBSERVE_MARKER_NAME
+from ccc_storage_mountd import childmount
+from ccc_storage_mountd.daemon import MountdService
 
 
 class FakeHandle:
@@ -35,7 +35,7 @@ def test_observe_access_at_mounts_child_at_visible_dispatcher_path(
     (source / OBSERVE_MARKER_NAME).write_text("")
 
     service = MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=tmp_path / "run",
         observe_root=source,
     )
@@ -63,7 +63,7 @@ def test_observe_access_at_reuse_is_idempotent_for_automount_refcount(
     mount_root.mkdir()
     (source / OBSERVE_MARKER_NAME).write_text("")
     service = MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=tmp_path / "run",
         observe_root=source,
     )

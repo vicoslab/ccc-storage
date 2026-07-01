@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack
-from ccc_layered_mountd.workers.compaction import (
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack
+from ccc_storage_mountd.workers.compaction import (
     build_partial_compaction,
     publish_partial_compaction,
 )
-from ccc_layered_pack.builder import BuildResult
+from ccc_storage_pack.builder import BuildResult
 
 
 def _pack(path: str, *, level: int, gen_min: int, gen_max: int | None = None, size: int = 10):

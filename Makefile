@@ -1,4 +1,4 @@
-# ccc-layered-storage — developer loop.
+# ccc-storage — developer loop.
 #
 # Nothing here requires Docker or privilege. FUSE/kernel/multinode tiers are
 # capability-gated by the probe in tests/fakes/capability.py and skip with a

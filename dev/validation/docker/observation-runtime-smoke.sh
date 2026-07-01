@@ -4,8 +4,8 @@ set -euo pipefail
 # Real marker-observation SquashFS runtime smoke.
 #
 # Validates:
-#   - CCC_LAYERED_OBSERVE at the root makes top-level dirs child boundaries;
-#   - a nested CCC_LAYERED_OBSERVE creates deeper independent child boundaries;
+#   - CCC_STORAGE_OBSERVE at the root makes top-level dirs child boundaries;
+#   - a nested CCC_STORAGE_OBSERVE creates deeper independent child boundaries;
 #   - parent packs keep marker files and mountpoint stubs, but exclude child payload;
 #   - child packs live in separate pack_object_dir namespaces;
 #   - observation registration is lazy: no child mounts before access, only the
@@ -23,8 +23,8 @@ if [ -z "$python_bin" ]; then
     python_bin="python"
   fi
 fi
-tag="${CCC_DOCKER_TAG:-ccc-layered-storage:observation-runtime-local}"
-runtime_root_input="${CCC_RUNTIME_ROOT:-/storage/user/ccc-layered-storage-observation-test}"
+tag="${CCC_DOCKER_TAG:-ccc-storage:observation-runtime-local}"
+runtime_root_input="${CCC_RUNTIME_ROOT:-/storage/user/ccc-storage-observation-test}"
 runtime_docker_source_root_input="${CCC_RUNTIME_DOCKER_SOURCE_ROOT:-}"
 
 resolve_path() {
@@ -133,17 +133,17 @@ import subprocess
 from dataclasses import replace
 from pathlib import Path
 
-from ccc_layered_core.manifest import PackStack, dump_atomic, load_manifest
-from ccc_layered_core.observe import OBSERVE_MARKER_NAME, immediate_child_boundaries
-from ccc_layered_mountd.control import ControlServer
-from ccc_layered_mountd.daemon import MountdService
-from ccc_layered_pack.builder import (
+from ccc_storage_core.manifest import PackStack, dump_atomic, load_manifest
+from ccc_storage_core.observe import OBSERVE_MARKER_NAME, immediate_child_boundaries
+from ccc_storage_mountd.control import ControlServer
+from ccc_storage_mountd.daemon import MountdService
+from ccc_storage_pack.builder import (
     BOUNDARY_MARKER_NAME,
     build_pack,
     pack_object_dir,
     safe_pack_name,
 )
-from ccc_layered_pack.reader import extract
+from ccc_storage_pack.reader import extract
 
 root = Path('/ccc-runtime')
 nfs = root / 'nfs'

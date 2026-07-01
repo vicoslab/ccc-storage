@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from ccc_layered_cli.main import main as cli_main
-from ccc_layered_core.manifest import (
+from ccc_storage_cli.main import main as cli_main
+from ccc_storage_core.manifest import (
     ChildManifest,
     PackInfo,
     PackStack,
     dump_atomic,
     load_manifest,
 )
-from ccc_layered_core.protocol import Request
-from ccc_layered_mountd.control import ControlServer
-from ccc_layered_mountd.daemon import MountdService
+from ccc_storage_core.protocol import Request
+from ccc_storage_mountd.control import ControlServer
+from ccc_storage_mountd.daemon import MountdService
 
 
 def _write_child(fake_nfs, *, deltas=0, pinned=False):
@@ -29,7 +29,7 @@ def _write_child(fake_nfs, *, deltas=0, pinned=False):
     )
     manifest_path = fake_nfs.subdir("registry") / "foo.toml"
     dump_atomic(manifest_path, manifest)
-    service = MountdService(nfs_root=fake_nfs.ccc_layered, run_dir=fake_nfs.root / "run")
+    service = MountdService(nfs_root=fake_nfs.ccc_storage, run_dir=fake_nfs.root / "run")
     service.reload_registry()
     return service, manifest, manifest_path
 

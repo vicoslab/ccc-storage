@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.locks import NFSLock
-from ccc_layered_core.manifest import (
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.locks import NFSLock
+from ccc_storage_core.manifest import (
     WRITE_POLICY_LOCAL_SSD_ASYNC,
     ChildManifest,
     OverlayInfo,
@@ -12,20 +12,20 @@ from ccc_layered_core.manifest import (
     dump_atomic,
     load_manifest,
 )
-from ccc_layered_mountd import childmount, daemon
-from ccc_layered_mountd.daemon import MountdService
-from ccc_layered_mountd.overlay import (
+from ccc_storage_mountd import childmount, daemon
+from ccc_storage_mountd.daemon import MountdService
+from ccc_storage_mountd.overlay import (
     OverlayPaths,
     dirty_mirror_paths,
     local_overlay_paths,
     publish_logical_mirror,
 )
-from ccc_layered_pack.builder import BuildResult
+from ccc_storage_pack.builder import BuildResult
 
 
 def _write_local_async_child(fake_nfs):
     child_id = "observe:env"
-    overlays = OverlayPaths.for_child(fake_nfs.ccc_layered / "overlays", child_id)
+    overlays = OverlayPaths.for_child(fake_nfs.ccc_storage / "overlays", child_id)
     manifest = ChildManifest(
         id=child_id,
         name="env",
@@ -38,9 +38,9 @@ def _write_local_async_child(fake_nfs):
             overlay_generation=0,
         ),
     )
-    manifest_path = fake_nfs.ccc_layered / "registry" / "observe" / "env.toml"
+    manifest_path = fake_nfs.ccc_storage / "registry" / "observe" / "env.toml"
     dump_atomic(manifest_path, manifest)
-    service = MountdService(fake_nfs.ccc_layered, fake_nfs.root / "run")
+    service = MountdService(fake_nfs.ccc_storage, fake_nfs.root / "run")
     service.reload_registry()
     return service, manifest, manifest_path
 
@@ -52,7 +52,7 @@ def test_local_async_status_reports_latest_published_mirror(fake_nfs, tmp_path):
     (merged / "created.txt").write_text("created")
     publish_logical_mirror(
         merged,
-        dirty_mirror_paths(fake_nfs.ccc_layered, manifest.id),
+        dirty_mirror_paths(fake_nfs.ccc_storage, manifest.id),
         child_id=manifest.id,
         node_id="node-a",
         base_generation=manifest.generation,
@@ -80,7 +80,7 @@ def test_local_async_commit_builds_delta_from_published_mirror_and_cleans_async_
     (merged / "created.txt").write_text("created")
     mirror = publish_logical_mirror(
         merged,
-        dirty_mirror_paths(fake_nfs.ccc_layered, manifest.id),
+        dirty_mirror_paths(fake_nfs.ccc_storage, manifest.id),
         child_id=manifest.id,
         node_id="node-a",
         base_generation=manifest.generation,
@@ -105,7 +105,7 @@ def test_local_async_commit_builds_delta_from_published_mirror_and_cleans_async_
     assert built[0][0] == mirror.path
     assert result["generation"] == 1
     assert result["state"] == "clean"
-    assert not dirty_mirror_paths(fake_nfs.ccc_layered, manifest.id).root.exists()
+    assert not dirty_mirror_paths(fake_nfs.ccc_storage, manifest.id).root.exists()
     assert not (service.mounts.local_overlay_root / "observe%3Aenv").exists()
     persisted = load_manifest(manifest_path)
     assert persisted.write_policy == WRITE_POLICY_LOCAL_SSD_ASYNC
@@ -131,7 +131,7 @@ def test_local_async_commit_noops_for_empty_published_mirror(monkeypatch, fake_n
     empty.mkdir()
     publish_logical_mirror(
         empty,
-        dirty_mirror_paths(fake_nfs.ccc_layered, manifest.id),
+        dirty_mirror_paths(fake_nfs.ccc_storage, manifest.id),
         child_id=manifest.id,
         node_id="node-a",
         base_generation=manifest.generation,
@@ -156,7 +156,7 @@ def test_local_async_commit_refuses_external_writer_lock(fake_nfs, tmp_path):
     (merged / "created.txt").write_text("created")
     publish_logical_mirror(
         merged,
-        dirty_mirror_paths(fake_nfs.ccc_layered, manifest.id),
+        dirty_mirror_paths(fake_nfs.ccc_storage, manifest.id),
         child_id=manifest.id,
         node_id="node-a",
         base_generation=manifest.generation,
@@ -176,7 +176,7 @@ def test_local_async_commit_refuses_stale_base_generation(fake_nfs, tmp_path):
     (merged / "created.txt").write_text("created")
     publish_logical_mirror(
         merged,
-        dirty_mirror_paths(fake_nfs.ccc_layered, manifest.id),
+        dirty_mirror_paths(fake_nfs.ccc_storage, manifest.id),
         child_id=manifest.id,
         node_id="node-a",
         base_generation=manifest.generation + 1,

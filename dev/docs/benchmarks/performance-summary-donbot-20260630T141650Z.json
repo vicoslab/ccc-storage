@@ -1,7 +1,7 @@
 {
-  "local_ssd_root": "/tmp/ccc-layered-storage-performance-local/runs/donbot-20260630T141650Z-42250",
+  "local_ssd_root": "/tmp/ccc-storage-performance-local/runs/donbot-20260630T141650Z-42250",
   "run_id": "donbot-20260630T141650Z-42250",
-  "runtime_root": "/storage/user/ccc-layered-storage-performance-test/runs/donbot-20260630T141650Z-42250",
+  "runtime_root": "/storage/user/ccc-storage-performance-test/runs/donbot-20260630T141650Z-42250",
   "validation": {
     "failures": [],
     "min_direct_local_speedup_over_nfs": 0.0,
@@ -20,7 +20,7 @@
         "direct-local": {
           "mount": {
             "fstype": "ext4",
-            "source": "/dev/md0[/tmp/ccc-layered-storage-performance-local/runs/donbot-20260630T141650Z-42250/direct]",
+            "source": "/dev/md0[/tmp/ccc-storage-performance-local/runs/donbot-20260630T141650Z-42250/direct]",
             "target": "/bench/local"
           },
           "read": {
@@ -57,7 +57,7 @@
         "direct-nfs": {
           "mount": {
             "fstype": "nfs4",
-            "source": "10.10.20.31:/nfs/LUVSS_home/vicos/domen.tabernik@fri.uni-lj.si/ccc-layered-storage-performance-test/runs/donbot-20260630T141650Z-42250/nfs",
+            "source": "10.10.20.31:/nfs/LUVSS_home/vicos/domen.tabernik@fri.uni-lj.si/ccc-storage-performance-test/runs/donbot-20260630T141650Z-42250/nfs",
             "target": "/bench/nfs"
           },
           "read": {
@@ -178,7 +178,7 @@
         "direct-local": {
           "mount": {
             "fstype": "ext4",
-            "source": "/dev/md0[/tmp/ccc-layered-storage-performance-local/runs/donbot-20260630T141650Z-42250/direct]",
+            "source": "/dev/md0[/tmp/ccc-storage-performance-local/runs/donbot-20260630T141650Z-42250/direct]",
             "target": "/bench/local"
           },
           "read": {
@@ -215,7 +215,7 @@
         "direct-nfs": {
           "mount": {
             "fstype": "nfs4",
-            "source": "10.10.20.31:/nfs/LUVSS_home/vicos/domen.tabernik@fri.uni-lj.si/ccc-layered-storage-performance-test/runs/donbot-20260630T141650Z-42250/nfs",
+            "source": "10.10.20.31:/nfs/LUVSS_home/vicos/domen.tabernik@fri.uni-lj.si/ccc-storage-performance-test/runs/donbot-20260630T141650Z-42250/nfs",
             "target": "/bench/nfs"
           },
           "read": {

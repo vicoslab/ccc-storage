@@ -3,13 +3,13 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ccc-layered-storage"
+name = "ccc-storage"
 version = "0.0.0"
-description = "CCC SquashFS-backed layered storage (monorepo of independently-buildable packages)"
+description = "CCC SquashFS-backed storage (monorepo of independently-buildable packages)"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "CCC layered storage" }]
+authors = [{ name = "CCC storage" }]
 # Phase-00 is scaffolding only; the importable packages have no hard runtime
 # dependencies yet. Real deps land with the phase that introduces them.
 dependencies = []
@@ -37,7 +37,7 @@ ccc-storage = "ccc_storage.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["ccc_layered_*", "ccc_storage*"]
+include = ["ccc_storage*"]
 
 [tool.pytest.ini_options]
 # src/ makes the packages importable without an install; "." makes the

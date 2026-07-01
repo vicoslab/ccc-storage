@@ -11,7 +11,7 @@ def test_cluster_starts_and_stops_three_nodes(test_root, tmp_path) -> None:
     run_base = tmp_path / "run"
     pids: list[int] = []
     try:
-        with node_harness.node_cluster(3, nfs.ccc_layered, base_run=run_base) as nodes:
+        with node_harness.node_cluster(3, nfs.ccc_storage, base_run=run_base) as nodes:
             assert len(nodes) == 3
             for node in nodes:
                 assert node.is_running()
@@ -30,7 +30,7 @@ def test_cluster_leaves_no_stray_mounts(test_root, tmp_path) -> None:
     nfs = fake_nfs_mod.create_fake_nfs(test_root)
     run_base = tmp_path / "run"
     try:
-        with node_harness.node_cluster(2, nfs.ccc_layered, base_run=run_base):
+        with node_harness.node_cluster(2, nfs.ccc_storage, base_run=run_base):
             pass
         # The placeholder mounts nothing, so the post-teardown sweep is empty.
         assert node_harness.sweep_stray_mounts(run_base) == []

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack, dump_atomic
-from ccc_layered_mountd import childmount
-from ccc_layered_mountd.daemon import MountdService
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack, dump_atomic
+from ccc_storage_mountd import childmount
+from ccc_storage_mountd.daemon import MountdService
 
 
 def _write_manifest(registry, child_id="dataset:foo", name="foo") -> ChildManifest:
@@ -23,7 +23,7 @@ def _write_manifest(registry, child_id="dataset:foo", name="foo") -> ChildManife
 
 def test_mountd_service_scans_registry_and_reports_status(fake_nfs, tmp_path):
     manifest = _write_manifest(fake_nfs.subdir("registry"))
-    service = MountdService(nfs_root=fake_nfs.ccc_layered, run_dir=tmp_path / "run")
+    service = MountdService(nfs_root=fake_nfs.ccc_storage, run_dir=tmp_path / "run")
 
     service.reload_registry()
     listed = service.handle_ls()["children"]
@@ -54,7 +54,7 @@ def test_mountd_service_mount_and_umount_delegate_to_childmount(monkeypatch, fak
         return FakeHandle(mountpoint)
 
     monkeypatch.setattr(childmount, "mount_stack_ro", fake_mount_stack_ro)
-    service = MountdService(nfs_root=fake_nfs.ccc_layered, run_dir=tmp_path / "run")
+    service = MountdService(nfs_root=fake_nfs.ccc_storage, run_dir=tmp_path / "run")
     service.reload_registry()
 
     mounted = service.handle_mount(manifest.id)

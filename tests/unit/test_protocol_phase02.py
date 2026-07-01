@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ccc_layered_core.protocol import (
+from ccc_storage_core.protocol import (
     ProtocolError,
     Request,
     Response,

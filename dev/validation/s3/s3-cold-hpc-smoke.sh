@@ -54,7 +54,7 @@ host_safe="$(printf '%s' "$host_safe" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 run_id="${host_safe:-host}-${timestamp}-$$"
 work_root="${CCC_S3_COLD_HPC_WORK_ROOT:-$repo_root/.scratch/s3-cold-hpc-smoke-$run_id}"
-prefix="${CCC_S3_PREFIX:-ccc-layered-storage/cold-hpc-smoke/$run_id}"
+prefix="${CCC_S3_PREFIX:-ccc-storage/cold-hpc-smoke/$run_id}"
 
 mkdir -p "$work_root"
 cleanup() {
@@ -88,26 +88,26 @@ import uuid
 import hashlib
 from pathlib import Path
 
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack, dump_atomic, load_manifest
-from ccc_layered_hpc.hpc_s3_exchange import (
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack, dump_atomic, load_manifest
+from ccc_storage_hpc.hpc_s3_exchange import (
     fetch_hpc_packset_bundle,
     import_hpc_delta_from_s3,
     publish_hpc_import_delta,
     publish_hpc_packset_bundle,
 )
-from ccc_layered_hpc.importqueue import ImportQueue, Provenance
-from ccc_layered_hpc.object_store import Boto3ObjectStore, ObjectStoreError
-from ccc_layered_hpc.s3mirror import archive_committed_packs_to_cold_storage, recall_cold_pack
-from ccc_layered_mountd.daemon import MountdService
-from ccc_layered_pack.bundle import (
+from ccc_storage_hpc.importqueue import ImportQueue, Provenance
+from ccc_storage_hpc.object_store import Boto3ObjectStore, ObjectStoreError
+from ccc_storage_hpc.s3mirror import archive_committed_packs_to_cold_storage, recall_cold_pack
+from ccc_storage_mountd.daemon import MountdService
+from ccc_storage_pack.bundle import (
     BundleEntry,
     MountGraph,
     MountGraphNode,
     build_packset_bundle,
     unpack_packset_bundle,
 )
-from ccc_layered_pack.builder import build_pack
+from ccc_storage_pack.builder import build_pack
 
 endpoint, addressing_style, region, bucket_arg, prefix, work_root_arg = sys.argv[1:]
 work_root = Path(work_root_arg)
@@ -118,7 +118,7 @@ bucket = bucket_arg.strip()
 if not bucket:
     suffix = uuid.uuid4().hex[:10]
     host = ''.join(ch if ch.isalnum() else '-' for ch in socket.gethostname().lower()).strip('-')[:18]
-    bucket = f"ccc-layered-cold-hpc-{host or 'host'}-{int(time.time())}-{suffix}"[:63].strip('-')
+    bucket = f"ccc-storage-cold-hpc-{host or 'host'}-{int(time.time())}-{suffix}"[:63].strip('-')
 
 store = Boto3ObjectStore(
     bucket=bucket,
@@ -135,7 +135,7 @@ try:
 except ObjectStoreError as exc:
     raise SystemExit(f"S3 bucket setup failed: {exc}") from exc
 
-nfs_root = work_root / "nfs" / ".ccc-layered"
+nfs_root = work_root / "nfs" / ".ccc-storage"
 run_dir = work_root / "run"
 source_dir = work_root / "source-folder"
 pack_dir = nfs_root / "packs" / "s3-cold-smoke"

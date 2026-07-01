@@ -9,7 +9,7 @@ remains the hot shared truth for manifests, overlays, and hot pack files.
 - NFS-mounted shared state directory, default:
 
   ```text
-  /storage/.ccc-layered
+  /storage/.ccc-storage
   ```
 
 - Managed parents should be introduced as **new mountpoints first**, not by
@@ -23,7 +23,7 @@ Minimum read-only/runtime stack:
 - `/dev/fuse` available when using user-space FUSE adapters.
 - `fusermount3` available for unprivileged FUSE paths.
 - `fuse-overlayfs` or kernel OverlayFS for writable union/runtime lanes.
-- Python 3.11+ and the `ccc-layered-storage` package `ccc-storage` entry point on PATH.
+- Python 3.11+ and the `ccc-storage` package `ccc-storage` entry point on PATH.
 
 Privileged host daemon mode:
 
@@ -50,7 +50,7 @@ python -c "from tests.fakes.capability import CAPS; print(CAPS)"
 ```
 
 For a scratch-only control-plane smoke test that does not touch production
-`/storage/.ccc-layered`, run from the repository checkout:
+`/storage/.ccc-storage`, run from the repository checkout:
 
 ```bash
 dev/validation/local/runtime-smoke.sh
@@ -146,8 +146,8 @@ resolved by the daemon on the host, while the caller may see the same shared
 storage through `/storage/user`. In that case pass both roots:
 
 ```bash
-CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-runtime-test \
-CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-layered-storage-runtime-test \
+CCC_RUNTIME_ROOT=/storage/user/ccc-storage-runtime-test \
+CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-storage-runtime-test \
 CCC_CLIENT_CONTAINERS=domen-cuda10 \
 dev/validation/docker/privileged-runtime-smoke.sh
 ```
@@ -164,8 +164,8 @@ contains both original base-pack files and newly committed delta-pack files.
 For nested/hierarchical pack validation, run:
 
 ```bash
-CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-nested-test \
-CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-layered-storage-nested-test \
+CCC_RUNTIME_ROOT=/storage/user/ccc-storage-nested-test \
+CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-storage-nested-test \
 dev/validation/docker/nested-runtime-smoke.sh
 ```
 
@@ -180,12 +180,12 @@ For the marker-driven observation model that replaces bespoke explicit nesting,
 run:
 
 ```bash
-CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-observation-test \
-CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-layered-storage-observation-test \
+CCC_RUNTIME_ROOT=/storage/user/ccc-storage-observation-test \
+CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-storage-observation-test \
 dev/validation/docker/observation-runtime-smoke.sh
 ```
 
-This smoke places visible `CCC_LAYERED_OBSERVE` marker files at a root and a
+This smoke places visible `CCC_STORAGE_OBSERVE` marker files at a root and a
 nested `user1/conda` directory, builds parent/child packs with
 `exclude_observed=True`, verifies that parent packs keep marker files and
 `.ccc-boundary` mountpoint stubs while excluding observed child payload, checks
@@ -197,7 +197,7 @@ is mounted after access.
 By default the script isolates state under:
 
 ```text
-/storage/user/ccc-layered-storage-runtime-test/runs/<hostname>-<timestamp>-<pid>
+/storage/user/ccc-storage-runtime-test/runs/<hostname>-<timestamp>-<pid>
 ```
 
 `CCC_RUNTIME_ROOT` may point under `/storage/user/*`, `/tmp/*`, or this
@@ -213,7 +213,7 @@ example:
 
 ```bash
 for node in donbot morbo calculon crushinator flexo kif zapp; do
-  ssh "$node" 'cd /path/to/ccc-layered-storage && CCC_CLIENT_CONTAINERS=domen-cuda10 dev/validation/docker/privileged-runtime-smoke.sh'
+  ssh "$node" 'cd /path/to/ccc-storage && CCC_CLIENT_CONTAINERS=domen-cuda10 dev/validation/docker/privileged-runtime-smoke.sh'
 done
 ```
 
@@ -233,7 +233,7 @@ ccc-storage doctor
 Stop the daemon and remove the unit:
 
 ```bash
-sudo systemctl stop ccc-storage mountd
+sudo systemctl stop ccc-storage-mountd
 sudo deploy/systemd/uninstall.sh
 ```
 

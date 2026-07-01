@@ -10,12 +10,12 @@ from tests.fakes import fake_nfs as fake_nfs_mod
 def test_create_lays_out_five_subdirs(test_root) -> None:
     nfs = fake_nfs_mod.create_fake_nfs(test_root)
     try:
-        assert nfs.ccc_layered.name == ".ccc-layered"
-        assert nfs.ccc_layered.is_dir()
+        assert nfs.ccc_storage.name == ".ccc-storage"
+        assert nfs.ccc_storage.is_dir()
         for name in fake_nfs_mod.SUBDIRS:
             assert nfs.subdir(name).is_dir()
         # Exactly the five authoritative subdirs, nothing extra.
-        present = {p.name for p in nfs.ccc_layered.iterdir()}
+        present = {p.name for p in nfs.ccc_storage.iterdir()}
         assert present == set(fake_nfs_mod.SUBDIRS)
     finally:
         nfs.cleanup()
@@ -56,5 +56,5 @@ def test_distinct_trees_are_unique(test_root) -> None:
 def test_fixture_sets_nfs_root_env(fake_nfs, monkeypatch) -> None:
     import os
 
-    assert os.environ["CCC_NFS_ROOT"] == str(fake_nfs.ccc_layered)
-    assert fake_nfs.ccc_layered.is_dir()
+    assert os.environ["CCC_NFS_ROOT"] == str(fake_nfs.ccc_storage)
+    assert fake_nfs.ccc_storage.is_dir()

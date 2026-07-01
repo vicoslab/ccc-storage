@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from ccc_layered_cli import conda_shim
-from ccc_layered_core.manifest import (
+from ccc_storage_cli import conda_shim
+from ccc_storage_core.manifest import (
     WRITE_POLICY_LOCAL_SSD_ASYNC,
     WRITE_POLICY_SHARED_NFS,
     load_manifest,
 )
-from ccc_layered_core.observe import OBSERVE_MARKER_NAME, parse_observe_marker_policy
-from ccc_layered_mountd.daemon import MountdService
+from ccc_storage_core.observe import OBSERVE_MARKER_NAME, parse_observe_marker_policy
+from ccc_storage_mountd.daemon import MountdService
 
 
 def test_observe_marker_empty_uses_mountd_default_policy(fake_nfs, tmp_path):
@@ -16,14 +16,14 @@ def test_observe_marker_empty_uses_mountd_default_policy(fake_nfs, tmp_path):
     (source / OBSERVE_MARKER_NAME).write_text("")
 
     service = MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=tmp_path / "run",
         observe_root=source,
         default_write_policy=WRITE_POLICY_LOCAL_SSD_ASYNC,
     )
 
     service.handle_observe_mkdir("env-a")
-    manifest = load_manifest(fake_nfs.ccc_layered / "registry" / "observe" / "env-a.toml")
+    manifest = load_manifest(fake_nfs.ccc_storage / "registry" / "observe" / "env-a.toml")
 
     assert manifest.write_policy == WRITE_POLICY_LOCAL_SSD_ASYNC
 
@@ -34,14 +34,14 @@ def test_observe_marker_toml_policy_overrides_mountd_default(fake_nfs, tmp_path)
     (source / OBSERVE_MARKER_NAME).write_text('write_policy = "local-ssd-async"\n')
 
     service = MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=tmp_path / "run",
         observe_root=source,
         default_write_policy=WRITE_POLICY_SHARED_NFS,
     )
 
     service.handle_observe_mkdir("env-a")
-    manifest = load_manifest(fake_nfs.ccc_layered / "registry" / "observe" / "env-a.toml")
+    manifest = load_manifest(fake_nfs.ccc_storage / "registry" / "observe" / "env-a.toml")
 
     assert manifest.write_policy == WRITE_POLICY_LOCAL_SSD_ASYNC
 

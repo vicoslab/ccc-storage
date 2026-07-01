@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ccc_layered_pack.builder import (
+from ccc_storage_pack.builder import (
     BOUNDARY_MARKER_NAME,
     count_files,
     create_boundary_markers,

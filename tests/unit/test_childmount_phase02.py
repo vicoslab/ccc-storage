@@ -4,9 +4,9 @@ from dataclasses import dataclass
 
 import pytest
 
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack
-from ccc_layered_mountd import childmount
-from ccc_layered_mountd.childmount import ChildMountError, ChildMountManager
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack
+from ccc_storage_mountd import childmount
+from ccc_storage_mountd.childmount import ChildMountError, ChildMountManager
 
 
 @dataclass

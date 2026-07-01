@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ccc_layered_bench.perf import Workload, make_payload, relative_paths, run_write_read
+from ccc_storage_bench.perf import Workload, make_payload, relative_paths, run_write_read
 
 
 def test_relative_paths_are_image_like_and_bounded_by_fanout():

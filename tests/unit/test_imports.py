@@ -7,11 +7,11 @@ import importlib
 import pytest
 
 PACKAGES = [
-    "ccc_layered_core",
-    "ccc_layered_pack",
-    "ccc_layered_mountd",
-    "ccc_layered_cli",
-    "ccc_layered_hpc",
+    "ccc_storage_core",
+    "ccc_storage_pack",
+    "ccc_storage_mountd",
+    "ccc_storage_cli",
+    "ccc_storage_hpc",
 ]
 
 
@@ -34,10 +34,10 @@ def test_package_has_version_string(name: str) -> None:
 
 def test_entrypoint_modules_import() -> None:
     """The four entry-point callables resolve and are callable."""
-    from ccc_layered_cli.main import main as cli_main
-    from ccc_layered_hpc.client import main as hpc_main
-    from ccc_layered_mountd.daemon import main as mountd_main
-    from ccc_layered_pack.cli import main as pack_main
+    from ccc_storage_cli.main import main as cli_main
+    from ccc_storage_hpc.client import main as hpc_main
+    from ccc_storage_mountd.daemon import main as mountd_main
+    from ccc_storage_pack.cli import main as pack_main
 
     for fn in (pack_main, mountd_main, cli_main, hpc_main):
         assert callable(fn)

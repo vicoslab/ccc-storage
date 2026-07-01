@@ -4,8 +4,8 @@ import subprocess
 
 import pytest
 
-from ccc_layered_pack import reader
-from ccc_layered_pack.reader import PackReadError, extract, mount_ro
+from ccc_storage_pack import reader
+from ccc_storage_pack.reader import PackReadError, extract, mount_ro
 
 
 def test_mount_ro_fails_clearly_without_squashfuse(monkeypatch, tmp_path):

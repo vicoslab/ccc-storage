@@ -14,10 +14,10 @@ set -euo pipefail
 #   - large-files: few files, each >100 MiB
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-image_tag="${CCC_MOUNTD_IMAGE:-ccc-layered-storage-mountd:local}"
+image_tag="${CCC_MOUNTD_IMAGE:-ccc-storage-mountd:local}"
 app_image="${CCC_APP_IMAGE:-$image_tag}"
-runtime_root="${CCC_RUNTIME_ROOT:-/storage/user/ccc-layered-storage-performance-test}"
-local_ssd_root="${CCC_LOCAL_SSD_ROOT:-/tmp/ccc-layered-storage-performance-local}"
+runtime_root="${CCC_RUNTIME_ROOT:-/storage/user/ccc-storage-performance-test}"
+local_ssd_root="${CCC_LOCAL_SSD_ROOT:-/tmp/ccc-storage-performance-local}"
 run_id="${CCC_RUNTIME_RUN_ID:-$(hostname)-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 run_root="$runtime_root/runs/$run_id"
 ssd_run_root="$local_ssd_root/runs/$run_id"
@@ -33,8 +33,8 @@ large_files="${CCC_PERF_LARGE_FILES:-4}"
 large_size_mib="${CCC_PERF_LARGE_SIZE_MIB:-128}"
 min_local_async_speedup="${CCC_PERF_MIN_LOCAL_ASYNC_SPEEDUP:-1.0}"
 min_direct_local_speedup="${CCC_PERF_MIN_DIRECT_LOCAL_SPEEDUP:-0.0}"
-writer_name="ccc-layered-perf-writer-$run_id"
-app_name="ccc-layered-perf-app-$run_id"
+writer_name="ccc-storage-perf-writer-$run_id"
+app_name="ccc-storage-perf-app-$run_id"
 docker_bin="${DOCKER:-docker}"
 
 cleanup() {
@@ -56,7 +56,7 @@ mkdir -p \
   "$run_root"/{nfs,source,published,results} \
   "$run_root/nfs"/{direct,results} \
   "$ssd_run_root"/{direct,local-overlays}
-touch "$run_root/source/CCC_LAYERED_OBSERVE"
+touch "$run_root/source/CCC_STORAGE_OBSERVE"
 
 if [ "$skip_build" != "1" ]; then
   "$docker_bin" build -f "$repo_root/deploy/docker/mountd.Dockerfile" -t "$image_tag" "$repo_root"
@@ -114,8 +114,8 @@ start_mountd() {
     --mount type=bind,src="$docker_run_root",dst=/ccc-runtime,bind-propagation=rshared \
     --mount type=bind,src="$docker_ssd_run_root",dst=/ccc-ssd,bind-propagation=rshared \
     -e CCC_NFS_ROOT=/ccc-runtime/nfs \
-    -e CCC_NODE_RUN_DIR=/run/ccc-layered \
-    -e CCC_MOUNTD_SOCK=/run/ccc-layered/mountd.sock \
+    -e CCC_NODE_RUN_DIR=/run/ccc-storage \
+    -e CCC_MOUNTD_SOCK=/run/ccc-storage/mountd.sock \
     -e CCC_OBSERVE_ROOT=/ccc-runtime/source \
     -e CCC_OBSERVE_MOUNTPOINT=/ccc-runtime/published \
     -e CCC_LOCAL_OVERLAY_ROOT=/ccc-ssd/local-overlays \
@@ -174,17 +174,17 @@ run_workload() {
   "$docker_bin" exec "$app_name" sh -lc "ls -la /storage/layered/$shared_child >/dev/null 2>&1 || true"
   wait_for_mount "$app_name" "/storage/layered/$shared_child"
   run_target_bench "$workload" layered-shared-nfs "/storage/layered/$shared_child" "$files" "$size_flag" "$size_value" "$seed"
-  "$docker_bin" exec "$writer_name" ccc-storage umount "observe:$shared_child" --json >/tmp/ccc-layered-${shared_child}-umount.json
-  "$docker_bin" exec "$writer_name" ccc-storage commit "observe:$shared_child" --json >/tmp/ccc-layered-${shared_child}-commit.json
+  "$docker_bin" exec "$writer_name" ccc-storage umount "observe:$shared_child" --json >/tmp/ccc-storage-${shared_child}-umount.json
+  "$docker_bin" exec "$writer_name" ccc-storage commit "observe:$shared_child" --json >/tmp/ccc-storage-${shared_child}-commit.json
 
-  "$docker_bin" exec "$writer_name" ccc-storage observe-mkdir "$local_child" --json >/tmp/ccc-layered-${local_child}-create.json
-  "$docker_bin" exec "$writer_name" ccc-storage write-policy "observe:$local_child" local-ssd-async --json >/tmp/ccc-layered-${local_child}-policy.json
+  "$docker_bin" exec "$writer_name" ccc-storage observe-mkdir "$local_child" --json >/tmp/ccc-storage-${local_child}-create.json
+  "$docker_bin" exec "$writer_name" ccc-storage write-policy "observe:$local_child" local-ssd-async --json >/tmp/ccc-storage-${local_child}-policy.json
   "$docker_bin" exec "$app_name" sh -lc "ls -la /storage/layered/$local_child >/dev/null"
   wait_for_mount "$app_name" "/storage/layered/$local_child"
   run_target_bench "$workload" layered-local-ssd-async "/storage/layered/$local_child" "$files" "$size_flag" "$size_value" "$seed"
-  "$docker_bin" exec "$writer_name" ccc-storage publish "observe:$local_child" --json >/tmp/ccc-layered-${local_child}-publish.json
-  "$docker_bin" exec "$writer_name" ccc-storage umount "observe:$local_child" --json >/tmp/ccc-layered-${local_child}-umount.json
-  "$docker_bin" exec "$writer_name" ccc-storage commit "observe:$local_child" --json >/tmp/ccc-layered-${local_child}-commit.json
+  "$docker_bin" exec "$writer_name" ccc-storage publish "observe:$local_child" --json >/tmp/ccc-storage-${local_child}-publish.json
+  "$docker_bin" exec "$writer_name" ccc-storage umount "observe:$local_child" --json >/tmp/ccc-storage-${local_child}-umount.json
+  "$docker_bin" exec "$writer_name" ccc-storage commit "observe:$local_child" --json >/tmp/ccc-storage-${local_child}-commit.json
   "$docker_bin" exec "$app_name" sh -lc "ls -la /storage/layered/$local_child >/dev/null 2>&1 || true"
   wait_for_mount "$app_name" "/storage/layered/$local_child"
   "$docker_bin" exec "$app_name" sh -lc "test -s /storage/layered/$local_child/class_000/img_000000.jpg"

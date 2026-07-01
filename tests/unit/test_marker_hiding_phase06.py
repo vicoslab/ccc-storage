@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from ccc_layered_mountd.managed_parent import is_internal_name, visible_entries
-from ccc_layered_pack.builder import BOUNDARY_MARKER_NAME
+from ccc_storage_mountd.managed_parent import is_internal_name, visible_entries
+from ccc_storage_pack.builder import BOUNDARY_MARKER_NAME
 
 
 def test_visible_entries_hides_boundary_markers_but_keeps_names():
-    entries = [BOUNDARY_MARKER_NAME, "env-a", "env-b", ".ccc-layered"]
+    entries = [BOUNDARY_MARKER_NAME, "env-a", "env-b", ".ccc-storage"]
     assert visible_entries(entries) == ["env-a", "env-b"]
 
 

@@ -10,7 +10,7 @@ def test_observation_runtime_smoke_exists_and_validates_marker_lazy_invariants()
     assert SCRIPT.exists()
     text = SCRIPT.read_text()
     for phrase in (
-        "CCC_LAYERED_OBSERVE",
+        "CCC_STORAGE_OBSERVE",
         "OBSERVE_MARKER_NAME",
         "immediate_child_boundaries(src)",
         "build_pack(src, root_pack_dir / 'base.sqfs', exclude_observed=True)",

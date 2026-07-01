@@ -3,15 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ccc_layered_core.manifest import (
+from ccc_storage_core.manifest import (
     WRITE_POLICY_LOCAL_SSD_ASYNC,
     WRITE_POLICY_SHARED_NFS,
     ChildManifest,
     OverlayInfo,
 )
-from ccc_layered_mountd import childmount
-from ccc_layered_mountd.childmount import ChildMountManager
-from ccc_layered_mountd.overlay import OverlayPaths
+from ccc_storage_mountd import childmount
+from ccc_storage_mountd.childmount import ChildMountManager
+from ccc_storage_mountd.overlay import OverlayPaths
 
 
 @dataclass

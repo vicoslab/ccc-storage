@@ -1,1 +1,1 @@
-"""ccc_layered_tests — tests/multinode."""
+"""ccc_storage_tests — tests/multinode."""

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import subprocess
 
-from ccc_layered_core.manifest import PackInfo
-from ccc_layered_pack import reader
+from ccc_storage_core.manifest import PackInfo
+from ccc_storage_pack import reader
 
 
 class FakeMountHandle:

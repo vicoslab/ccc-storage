@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ccc_layered_core.manifest import PackInfo, PackStack, dump_atomic, load_manifest
-from ccc_layered_core.observe import OBSERVE_MARKER_NAME
-from ccc_layered_mountd import childmount
-from ccc_layered_mountd.daemon import MountdService
+from ccc_storage_core.manifest import PackInfo, PackStack, dump_atomic, load_manifest
+from ccc_storage_core.observe import OBSERVE_MARKER_NAME
+from ccc_storage_mountd import childmount
+from ccc_storage_mountd.daemon import MountdService
 
 
 class FakeHandle:
@@ -24,7 +24,7 @@ def test_observe_mkdir_registers_child_manifest_without_mounting(fake_nfs, tmp_p
     (source / OBSERVE_MARKER_NAME).write_text("")
 
     service = MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=tmp_path / "run",
         observe_root=source,
     )
@@ -35,7 +35,7 @@ def test_observe_mkdir_registers_child_manifest_without_mounting(fake_nfs, tmp_p
     assert status["parent_path"] == "user1"
     assert status["mounted"] is False
     assert (source / "user1").is_dir()
-    manifest = load_manifest(fake_nfs.ccc_layered / "registry" / "observe" / "user1.toml")
+    manifest = load_manifest(fake_nfs.ccc_storage / "registry" / "observe" / "user1.toml")
     assert manifest.id == "observe:user1"
     assert manifest.pack_stack.lowers == ()
     assert service.mounts.active_count() == 0
@@ -48,7 +48,7 @@ def test_observe_ls_reports_discovered_and_registered_children(fake_nfs, tmp_pat
     (source / "user1").mkdir()
 
     service = MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=tmp_path / "run",
         observe_root=source,
     )
@@ -92,7 +92,7 @@ def test_observe_access_mounts_only_requested_child_and_nested_roots_work(
     (nested / OBSERVE_MARKER_NAME).write_text("")
 
     service = MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=tmp_path / "run",
         observe_root=source,
     )
@@ -102,10 +102,10 @@ def test_observe_access_mounts_only_requested_child_and_nested_roots_work(
 
     for status in (user1, user2, env_a):
         manifest_path = (
-            fake_nfs.ccc_layered / "registry" / "observe" / f"{status['safe_name']}.toml"
+            fake_nfs.ccc_storage / "registry" / "observe" / f"{status['safe_name']}.toml"
         )
         manifest = load_manifest(manifest_path)
-        pack_path = fake_nfs.ccc_layered / "packs" / status["safe_name"] / "base.sqfs"
+        pack_path = fake_nfs.ccc_storage / "packs" / status["safe_name"] / "base.sqfs"
         pack_path.parent.mkdir(parents=True, exist_ok=True)
         pack_path.write_bytes(status["id"].encode())
         updated = replace(
@@ -151,7 +151,7 @@ def test_observe_access_generation0_child_mounts_writable_upper_without_pack(
     (source / OBSERVE_MARKER_NAME).write_text("")
 
     service = MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=tmp_path / "run",
         observe_root=source,
     )

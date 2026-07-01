@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ccc_layered_core.manifest import ChildBoundary, ChildManifest
-from ccc_layered_core.resolve import BoundaryRegistry, resolve_owner_path
+from ccc_storage_core.manifest import ChildBoundary, ChildManifest
+from ccc_storage_core.resolve import BoundaryRegistry, resolve_owner_path
 
 
 def _parent() -> ChildManifest:

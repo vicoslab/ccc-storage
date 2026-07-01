@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ccc_layered_mountd.overlay import (
+from ccc_storage_mountd.overlay import (
     OverlayPaths,
     dirty_stats,
     ensure_active_upper,

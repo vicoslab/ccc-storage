@@ -64,7 +64,7 @@ def test_docker_source_root_env_is_documented_and_used_for_mount_source():
     assert "CCC_RUNTIME_DOCKER_SOURCE_ROOT" in prereqs_text
     assert (
         "/opt/shared_storage/user_data/<ccc-user-id>/"
-        "ccc-layered-storage-runtime-test"
+        "ccc-storage-runtime-test"
     ) in prereqs_text
     assert "refusing empty CCC_RUNTIME_DOCKER_SOURCE_ROOT" in host_text
     assert "refusing unsafe CCC_RUNTIME_DOCKER_SOURCE_ROOT" in host_text

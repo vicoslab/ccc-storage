@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from ccc_layered_core.manifest import (
+from ccc_storage_core.manifest import (
     ChildBoundary,
     ChildManifest,
     PackInfo,
     PackStack,
     dump_atomic,
 )
-from ccc_layered_mountd import childmount
-from ccc_layered_mountd.daemon import MountdService
-from ccc_layered_pack.builder import BOUNDARY_MARKER_NAME, pack_object_dir, safe_pack_name
+from ccc_storage_mountd import childmount
+from ccc_storage_mountd.daemon import MountdService
+from ccc_storage_pack.builder import BOUNDARY_MARKER_NAME, pack_object_dir, safe_pack_name
 
 
 def _pack_info(path, payload: bytes) -> PackInfo:
@@ -80,7 +80,7 @@ def test_mount_tree_mounts_nested_child_at_parent_boundary_path(monkeypatch, fak
         return FakeHandle(mountpoint)
 
     monkeypatch.setattr(childmount, "mount_stack_ro", fake_mount_stack_ro)
-    service = MountdService(nfs_root=fake_nfs.ccc_layered, run_dir=tmp_path / "run")
+    service = MountdService(nfs_root=fake_nfs.ccc_storage, run_dir=tmp_path / "run")
 
     result = service.handle_mount_tree(parent.id)
 

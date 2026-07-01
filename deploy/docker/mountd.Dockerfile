@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-LABEL org.opencontainers.image.title="ccc-layered-storage-mountd"
+LABEL org.opencontainers.image.title="ccc-storage-mountd"
 
-WORKDIR /workspace/ccc-layered-storage
+WORKDIR /workspace/ccc-storage
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -24,6 +24,6 @@ COPY deploy ./deploy
 RUN python -m pip install --upgrade pip \
     && python -m pip install '.[manifest,fuse]'
 
-ENTRYPOINT ["tini", "--", "/workspace/ccc-layered-storage/deploy/docker/mountd-entrypoint.sh"]
+ENTRYPOINT ["tini", "--", "/workspace/ccc-storage/deploy/docker/mountd-entrypoint.sh"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD ccc-storage doctor --json >/dev/null || exit 1

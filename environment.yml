@@ -1,11 +1,11 @@
-# ccc-dev — the development & test conda environment for ccc-layered-storage.
+# ccc-dev — the development & test conda environment for ccc-storage.
 #
 # Create it once:
 #     mamba env create -f environment.yml      # or: conda env create -f environment.yml
 #     conda activate ccc-dev
 #
-# Documented alias name: `ccc-layered-dev`. The default name stays `ccc-dev` to
-# match every planning document; rename with `-n ccc-layered-dev` if you prefer.
+# Documented alias name: `ccc-storage-dev`. The default name stays `ccc-dev` to
+# match every planning document; rename with `-n ccc-storage-dev` if you prefer.
 #
 # Phase-00 note on resolved binaries: phase-00 must verify that
 #   mksquashfs, unsquashfs, squashfuse, fuse-overlayfs, fusermount3

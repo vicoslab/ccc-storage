@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import (
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import (
     ChildManifest,
     PackInfo,
     PackStack,
     dump_atomic,
     load_manifest,
 )
-from ccc_layered_hpc.object_store import LocalObjectStore, ObjectStoreError
-from ccc_layered_hpc.s3mirror import (
+from ccc_storage_hpc.object_store import LocalObjectStore, ObjectStoreError
+from ccc_storage_hpc.s3mirror import (
     RecallError,
     archive_committed_packs_to_cold_storage,
     recall_cold_pack,

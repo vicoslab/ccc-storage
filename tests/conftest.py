@@ -78,7 +78,7 @@ def test_root() -> Path:
 def fake_nfs(test_root: Path, monkeypatch: pytest.MonkeyPatch) -> object:
     """A fresh fake-NFS tree; sets ``$CCC_NFS_ROOT`` for the test's duration."""
     nfs = fake_nfs_mod.create_fake_nfs(test_root)
-    monkeypatch.setenv("CCC_NFS_ROOT", str(nfs.ccc_layered))
+    monkeypatch.setenv("CCC_NFS_ROOT", str(nfs.ccc_storage))
     try:
         yield nfs
     finally:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ccc_layered_mountd.overlay import (
+from ccc_storage_mountd.overlay import (
     dirty_mirror_paths,
     latest_dirty_mirror,
     publish_logical_mirror,

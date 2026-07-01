@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import (
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import (
     ChildManifest,
     PackInfo,
     PackStack,
     dump_atomic,
     load_manifest,
 )
-from ccc_layered_mountd import daemon
-from ccc_layered_mountd.daemon import MountdService, _safe_child_name
-from ccc_layered_mountd.workers.auto_commit import AutoCommitWorker
-from ccc_layered_mountd.workers.policy import CommitPolicy
-from ccc_layered_pack.builder import BuildResult
+from ccc_storage_mountd import daemon
+from ccc_storage_mountd.daemon import MountdService, _safe_child_name
+from ccc_storage_mountd.workers.auto_commit import AutoCommitWorker
+from ccc_storage_mountd.workers.policy import CommitPolicy
+from ccc_storage_pack.builder import BuildResult
 
 
 def _fake_build_delta(src, base_manifest, out, tombstones=None):
@@ -41,7 +41,7 @@ def _write_child(fake_nfs, *, commit_mode="auto"):
     )
     manifest_path = fake_nfs.subdir("registry") / "foo.toml"
     dump_atomic(manifest_path, manifest)
-    service = MountdService(nfs_root=fake_nfs.ccc_layered, run_dir=fake_nfs.root / "run")
+    service = MountdService(nfs_root=fake_nfs.ccc_storage, run_dir=fake_nfs.root / "run")
     service.reload_registry()
     upper = service.overlay_paths(manifest).active_upper
     upper.mkdir(parents=True, exist_ok=True)
@@ -98,7 +98,7 @@ def test_tick_skips_gracefully_when_commit_lock_held(monkeypatch, fake_nfs):
     monkeypatch.setattr(daemon, "build_delta", _fake_build_delta)
     service, manifest, manifest_path = _write_child(fake_nfs)
     # Simulate a concurrent manual commit holding the per-child commit lock.
-    lock_path = fake_nfs.ccc_layered / "locks" / f"{_safe_child_name(manifest.id)}.commit.lock"
+    lock_path = fake_nfs.ccc_storage / "locks" / f"{_safe_child_name(manifest.id)}.commit.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path.write_text("{}")
     worker = AutoCommitWorker(service, policy=_EAGER)

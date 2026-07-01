@@ -5,11 +5,11 @@ import shutil
 
 import pytest
 
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack
-from ccc_layered_mountd.workers.compaction import build_partial_compaction
-from ccc_layered_mountd.workers.levels import LevelPolicy, parse_levels, plan_level_compaction
-from ccc_layered_pack.builder import build_pack
-from ccc_layered_pack.reader import extract
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack
+from ccc_storage_mountd.workers.compaction import build_partial_compaction
+from ccc_storage_mountd.workers.levels import LevelPolicy, parse_levels, plan_level_compaction
+from ccc_storage_pack.builder import build_pack
+from ccc_storage_pack.reader import extract
 
 
 def _require_squashfs_tools():

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import time
 
-from ccc_layered_core.observe import OBSERVE_MARKER_NAME
-from ccc_layered_mountd import childmount
-from ccc_layered_mountd.daemon import MountdService
-from ccc_layered_mountd.dispatcher_fuse import ObservationDispatchCore
+from ccc_storage_core.observe import OBSERVE_MARKER_NAME
+from ccc_storage_mountd import childmount
+from ccc_storage_mountd.daemon import MountdService
+from ccc_storage_mountd.dispatcher_fuse import ObservationDispatchCore
 
 
 class FakeHandle:
@@ -36,7 +36,7 @@ def test_observation_mkdir_and_readdir_are_instant_and_do_not_mount(
     mount_root.mkdir()
     (source / OBSERVE_MARKER_NAME).write_text("")
     service = MountdService(
-        nfs_root=fake_nfs.ccc_layered,
+        nfs_root=fake_nfs.ccc_storage,
         run_dir=tmp_path / "run",
         observe_root=source,
     )

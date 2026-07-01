@@ -15,7 +15,7 @@ set -euo pipefail
 #   CCC_S3_BUCKET           existing bucket to use. If unset, script attempts to
 #                           create a temporary bucket and deletes it afterwards.
 #   CCC_S3_PREFIX           object prefix. Default is per-run under
-#                           ccc-layered-storage/smoke/.
+#                           ccc-storage/smoke/.
 #   CCC_S3_KEEP             set to 1 to keep uploaded objects/scratch output.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -63,7 +63,7 @@ host_safe="$(printf '%s' "$host_safe" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 run_id="${host_safe:-host}-${timestamp}-$$"
 work_root="${CCC_S3_WORK_ROOT:-$repo_root/.scratch/s3-smoke-$run_id}"
-prefix="${CCC_S3_PREFIX:-ccc-layered-storage/smoke/$run_id}"
+prefix="${CCC_S3_PREFIX:-ccc-storage/smoke/$run_id}"
 
 mkdir -p "$work_root"
 cleanup() {
@@ -89,10 +89,10 @@ import uuid
 from dataclasses import replace
 from pathlib import Path
 
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack, S3Info, dump_atomic, load_manifest
-from ccc_layered_hpc.object_store import Boto3ObjectStore, ObjectStoreError
-from ccc_layered_hpc.s3mirror import RecallError, mirror_committed_packs, recall_cold_pack
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack, S3Info, dump_atomic, load_manifest
+from ccc_storage_hpc.object_store import Boto3ObjectStore, ObjectStoreError
+from ccc_storage_hpc.s3mirror import RecallError, mirror_committed_packs, recall_cold_pack
 
 endpoint, addressing_style, region, bucket_arg, prefix, work_root_arg = sys.argv[1:]
 work_root = Path(work_root_arg)
@@ -103,7 +103,7 @@ bucket = bucket_arg.strip()
 if not bucket:
     suffix = uuid.uuid4().hex[:10]
     host = ''.join(ch if ch.isalnum() else '-' for ch in socket.gethostname().lower()).strip('-')[:18]
-    bucket = f"ccc-layered-smoke-{host or 'host'}-{int(time.time())}-{suffix}"[:63].strip('-')
+    bucket = f"ccc-storage-smoke-{host or 'host'}-{int(time.time())}-{suffix}"[:63].strip('-')
 
 store = Boto3ObjectStore(
     bucket=bucket,

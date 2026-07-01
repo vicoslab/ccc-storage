@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import ChildManifest, OverlayInfo, PackInfo, PackStack, dump_atomic
-from ccc_layered_core.protocol import Request
-from ccc_layered_mountd import childmount, daemon
-from ccc_layered_mountd.control import ControlServer
-from ccc_layered_mountd.daemon import MountdService
-from ccc_layered_pack.builder import BuildResult
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import ChildManifest, OverlayInfo, PackInfo, PackStack, dump_atomic
+from ccc_storage_core.protocol import Request
+from ccc_storage_mountd import childmount, daemon
+from ccc_storage_mountd.control import ControlServer
+from ccc_storage_mountd.daemon import MountdService
+from ccc_storage_pack.builder import BuildResult
 
 
 def _write_child(fake_nfs, *, child_id: str = "observe:env-a") -> ChildManifest:
@@ -26,7 +26,7 @@ def _write_child(fake_nfs, *, child_id: str = "observe:env-a") -> ChildManifest:
         parent_path="env-a",
         overlay=OverlayInfo(
             mode="shared-overlay",
-            active_upper=str(fake_nfs.ccc_layered / "overlays" / "observe%3Aenv-a" / "active"),
+            active_upper=str(fake_nfs.ccc_storage / "overlays" / "observe%3Aenv-a" / "active"),
         ),
         pack_stack=PackStack(lowers=(PackInfo(path=str(pack), sha256="a" * 64, size=4),)),
     )
@@ -73,7 +73,7 @@ def test_commit_refuses_dirty_child_while_rw_mount_is_active(monkeypatch, fake_n
     monkeypatch.setattr(childmount, "mount_layered_rw", fake_mount_layered_rw)
     monkeypatch.setattr(daemon, "build_delta", fake_build_delta)
     manifest = _write_child(fake_nfs)
-    service = MountdService(fake_nfs.ccc_layered, tmp_path / "run")
+    service = MountdService(fake_nfs.ccc_storage, tmp_path / "run")
     service.reload_registry()
     service.mounts.mount_rw(manifest)
     paths = service.overlay_paths(manifest)
@@ -116,7 +116,7 @@ def test_mountd_docker_artifacts_are_dedicated_service_container():
 
     smoke_text = smoke.read_text()
     assert "ccc-storage-mountd-test" in smoke_text
-    assert "ccc-layered-app-test" in smoke_text
+    assert "ccc-storage-app-test" in smoke_text
     assert "bind-propagation=rshared" in smoke_text
     assert "bind-propagation=rslave" in smoke_text
     assert "--device /dev/fuse" in smoke_text
@@ -132,7 +132,7 @@ def test_idle_mount_reaper_unmounts_released_mount(monkeypatch, fake_nfs, tmp_pa
 
     monkeypatch.setattr(childmount, "mount_stack_ro", fake_mount_stack_ro)
     manifest = _write_child(fake_nfs)
-    service = MountdService(fake_nfs.ccc_layered, tmp_path / "run")
+    service = MountdService(fake_nfs.ccc_storage, tmp_path / "run")
     service.reload_registry()
 
     service.handle_mount(manifest.id)
@@ -147,7 +147,7 @@ def test_idle_mount_reaper_unmounts_released_mount(monkeypatch, fake_nfs, tmp_pa
 
 def test_ready_file_contains_doctor_json(fake_nfs, tmp_path):
     service = MountdService(
-        fake_nfs.ccc_layered,
+        fake_nfs.ccc_storage,
         tmp_path / "run",
         observe_mountpoint=tmp_path / "published",
     )
@@ -156,7 +156,7 @@ def test_ready_file_contains_doctor_json(fake_nfs, tmp_path):
     daemon._write_ready_file(service, ready)
 
     data = json.loads(ready.read_text())
-    assert data["nfs_root"] == str(fake_nfs.ccc_layered)
+    assert data["nfs_root"] == str(fake_nfs.ccc_storage)
     assert data["observation_mountpoint"] == str(tmp_path / "published")
     assert data["active_submount_count"] == 0
 

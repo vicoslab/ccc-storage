@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 docker_bin="${DOCKER:-docker}"
-tag="${CCC_DOCKER_TAG:-ccc-layered-storage:smoke-local}"
+tag="${CCC_DOCKER_TAG:-ccc-storage:smoke-local}"
 
 if ! command -v "$docker_bin" >/dev/null 2>&1; then
   echo "docker not found; install Docker or set DOCKER=/path/to/docker" >&2
@@ -26,8 +26,8 @@ fi
   sh -lc '
     set -eu
     make test
-    CCC_SMOKE_ROOT=/tmp/ccc-layered-docker-smoke/runtime dev/validation/local/runtime-smoke.sh
-    CCC_SMOKE_ROOT=/tmp/ccc-layered-docker-smoke/fuse dev/validation/local/fuse-smoke.sh
+    CCC_SMOKE_ROOT=/tmp/ccc-storage-docker-smoke/runtime dev/validation/local/runtime-smoke.sh
+    CCC_SMOKE_ROOT=/tmp/ccc-storage-docker-smoke/fuse dev/validation/local/fuse-smoke.sh
   '
 
 echo "docker smoke passed"

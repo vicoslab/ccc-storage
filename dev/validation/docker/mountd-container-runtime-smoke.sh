@@ -8,9 +8,9 @@ set -euo pipefail
 #   app container: unprivileged, no /dev/fuse, no mountd socket/env, sees only an rslave storage bind
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-image_tag="${CCC_MOUNTD_IMAGE:-ccc-layered-storage-mountd:local}"
+image_tag="${CCC_MOUNTD_IMAGE:-ccc-storage-mountd:local}"
 app_image="${CCC_APP_IMAGE:-$image_tag}"
-runtime_root="${CCC_RUNTIME_ROOT:-/storage/user/ccc-layered-storage-mountd-container-test}"
+runtime_root="${CCC_RUNTIME_ROOT:-/storage/user/ccc-storage-mountd-container-test}"
 run_id="${CCC_RUNTIME_RUN_ID:-$(hostname)-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 run_root="$runtime_root/runs/$run_id"
 docker_source_root="${CCC_RUNTIME_DOCKER_SOURCE_ROOT:-}"
@@ -18,7 +18,7 @@ keep="${CCC_RUNTIME_KEEP:-0}"
 skip_build="${CCC_RUNTIME_SKIP_BUILD:-0}"
 timeout_s="${CCC_MOUNTD_CONTAINER_TIMEOUT:-180}"
 mountd_name="ccc-storage-mountd-test-$run_id"
-app_name="ccc-layered-app-test-$run_id"
+app_name="ccc-storage-app-test-$run_id"
 
 docker_bin="${DOCKER:-docker}"
 
@@ -33,7 +33,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$run_root"/{nfs,source,published}
-touch "$run_root/source/CCC_LAYERED_OBSERVE"
+touch "$run_root/source/CCC_STORAGE_OBSERVE"
 
 if [ "$skip_build" != "1" ]; then
   "$docker_bin" build -f "$repo_root/deploy/docker/mountd.Dockerfile" -t "$image_tag" "$repo_root"
@@ -58,8 +58,8 @@ fi
   --security-opt seccomp=unconfined \
   --mount type=bind,src="$docker_run_root",dst=/ccc-runtime,bind-propagation=rshared \
   -e CCC_NFS_ROOT=/ccc-runtime/nfs \
-  -e CCC_NODE_RUN_DIR=/run/ccc-layered \
-  -e CCC_MOUNTD_SOCK=/run/ccc-layered/mountd.sock \
+  -e CCC_NODE_RUN_DIR=/run/ccc-storage \
+  -e CCC_MOUNTD_SOCK=/run/ccc-storage/mountd.sock \
   -e CCC_OBSERVE_ROOT=/ccc-runtime/source \
   -e CCC_OBSERVE_MOUNTPOINT=/ccc-runtime/published \
   -e CCC_MOUNTD_SOCKET_MODE=0600 \
@@ -95,7 +95,7 @@ wait_for_mount "$mountd_name" /ccc-runtime/published
     echo "app container unexpectedly has mountd/layered CCC env" >&2
     exit 1
   fi
-  test ! -S /run/ccc-layered/mountd.sock
+  test ! -S /run/ccc-storage/mountd.sock
   test ! -e /dev/fuse
   prop="$(findmnt -T /storage/layered -no PROPAGATION 2>/dev/null || true)"
   case "$prop" in *shared*|*slave*) ;; *) echo "unexpected app propagation: ${prop:-unknown}" >&2; exit 1 ;; esac

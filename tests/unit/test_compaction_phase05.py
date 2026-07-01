@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack
-from ccc_layered_mountd.workers.compaction import (
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack
+from ccc_storage_mountd.workers.compaction import (
     CompactionPolicy,
     consolidate,
     plan_compaction,
     publish_consolidation,
 )
-from ccc_layered_pack.builder import BuildResult
+from ccc_storage_pack.builder import BuildResult
 
 
 def _manifest(base_size, delta_sizes):

@@ -1,6 +1,6 @@
 # Deployment artifacts
 
-This directory contains operator-facing files for deploying `ccc-layered-storage`
+This directory contains operator-facing files for deploying `ccc-storage`
 on a server. Development-only validation, benchmark, and environment-specific
 smoke scripts live under `dev/`.
 
@@ -22,7 +22,7 @@ deploy/
 Build the dedicated runtime image from the repository root:
 
 ```bash
-docker build -f deploy/docker/mountd.Dockerfile -t ccc-layered-storage-mountd:local .
+docker build -f deploy/docker/mountd.Dockerfile -t ccc-storage-mountd:local .
 ```
 
 `mountd.Dockerfile` installs the package with its manifest/FUSE runtime extras,

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from ccc_layered_hpc.hpc_run import FakeHpcTransport, HpcRunRequest, run_hpc_job
-from ccc_layered_hpc.importqueue import ImportQueue, Provenance
-from ccc_layered_pack.bundle import MountGraph, MountGraphNode
+from ccc_storage_hpc.hpc_run import FakeHpcTransport, HpcRunRequest, run_hpc_job
+from ccc_storage_hpc.importqueue import ImportQueue, Provenance
+from ccc_storage_pack.bundle import MountGraph, MountGraphNode
 
 
 def test_import_queue_applies_delta_to_review_branch_and_promotes_explicitly(tmp_path):

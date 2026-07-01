@@ -6,9 +6,9 @@ python_bin="${PYTHON:-python}"
 
 # Default inside the repo so CCC's fusermount3 sidecar shim sees the mountpoint
 # under the container's shared workspace bind. Plain hosts may still override
-# CCC_SMOKE_ROOT=/tmp/ccc-layered-fuse-smoke.$$ if their normal fusermount3
+# CCC_SMOKE_ROOT=/tmp/ccc-storage-fuse-smoke.$$ if their normal fusermount3
 # permits /tmp mountpoints.
-default_root="$repo_root/.scratch/ccc-layered-fuse-smoke.$$"
+default_root="$repo_root/.scratch/ccc-storage-fuse-smoke.$$"
 smoke_root="${CCC_SMOKE_ROOT:-$default_root}"
 
 resolve_path() {
@@ -59,13 +59,13 @@ printf 'nested payload\n' >"$src_dir/nested/payload.txt"
 
 export PYTHONPATH="$repo_root/src:$repo_root${PYTHONPATH:+:$PYTHONPATH}"
 
-"$python_bin" -m ccc_layered_pack.cli build \
+"$python_bin" -m ccc_storage_pack.cli build \
   "$src_dir" \
   "$pack_path" \
   --comp gzip \
   --block 128K >/dev/null
 
-"$python_bin" -m ccc_layered_pack.cli verify "$pack_path" >/dev/null
+"$python_bin" -m ccc_storage_pack.cli verify "$pack_path" >/dev/null
 
 if ! command -v unsquashfs >/dev/null 2>&1; then
   echo "unsquashfs not found; install squashfs-tools for extraction validation" >&2

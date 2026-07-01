@@ -39,15 +39,15 @@ container-visible roots and Docker-host source roots:
 
 ```bash
 CCC_RUNTIME_KEEP=1 \
-CCC_RUNTIME_ROOT=/storage/user/ccc-layered-storage-performance-test \
-CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-layered-storage-performance-test \
-CCC_LOCAL_SSD_ROOT=/tmp/ccc-layered-storage-performance-local \
-CCC_LOCAL_SSD_DOCKER_SOURCE_ROOT=/tmp/ccc-layered-storage-performance-local \
+CCC_RUNTIME_ROOT=/storage/user/ccc-storage-performance-test \
+CCC_RUNTIME_DOCKER_SOURCE_ROOT=/opt/shared_storage/user_data/<ccc-user-id>/ccc-storage-performance-test \
+CCC_LOCAL_SSD_ROOT=/tmp/ccc-storage-performance-local \
+CCC_LOCAL_SSD_DOCKER_SOURCE_ROOT=/tmp/ccc-storage-performance-local \
 CCC_PERF_TIMEOUT=600 \
 dev/validation/performance/performance-runtime-benchmark.sh
 ```
 
-The script builds `ccc-layered-storage-mountd:local` unless
+The script builds `ccc-storage-mountd:local` unless
 `CCC_RUNTIME_SKIP_BUILD=1` is set.
 
 ## Validation gates
@@ -71,7 +71,7 @@ Final validation run:
 
 - Run id: `donbot-20260630T141650Z-42250`
 - Artifact: `dev/docs/benchmarks/performance-summary-donbot-20260630T141650Z.json`
-- Runtime root: `/storage/user/ccc-layered-storage-performance-test/runs/donbot-20260630T141650Z-42250`
+- Runtime root: `/storage/user/ccc-storage-performance-test/runs/donbot-20260630T141650Z-42250`
 - Validation: passed
 
 ### Write throughput

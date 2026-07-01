@@ -18,12 +18,12 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 
-from ccc_layered_bench import perf as bench_cli
-from ccc_layered_cli import __version__, conda_shim
-from ccc_layered_cli.main import CONTROL_COMMANDS, main as control_main
-from ccc_layered_hpc.client import main as hpc_main
-from ccc_layered_mountd.daemon import main as mountd_main
-from ccc_layered_pack.cli import main as pack_main
+from ccc_storage_bench import perf as bench_cli
+from ccc_storage_cli import __version__, conda_shim
+from ccc_storage_cli.main import CONTROL_COMMANDS, main as control_main
+from ccc_storage_hpc.client import main as hpc_main
+from ccc_storage_mountd.daemon import main as mountd_main
+from ccc_storage_pack.cli import main as pack_main
 
 Dispatcher = Callable[[list[str]], int]
 
@@ -57,7 +57,7 @@ def _format_help() -> str:
     choices = ",".join([name for name, _ in _TOOL_HELP] + list(CONTROL_COMMANDS))
     return f"""usage: ccc-storage [-h] [--version] {{{choices}}} ...
 
-Unified CCC layered-storage CLI.
+Unified CCC storage CLI.
 
 options:
   -h, --help   show this help message and exit
@@ -72,7 +72,7 @@ mountd control operations:
 examples:
   ccc-storage doctor
   ccc-storage pack build SRC OUT.sqfs
-  ccc-storage mountd --nfs-root /storage/.ccc-layered --run-dir /run/ccc-layered
+  ccc-storage mountd --nfs-root /storage/.ccc-storage --run-dir /run/ccc-storage
   ccc-storage conda install -n env numpy
 
 Use `ccc-storage <command> --help` for command-specific options.

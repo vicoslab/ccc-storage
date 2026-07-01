@@ -1,7 +1,7 @@
 """Hard test-isolation guard (planning README §7, phase-00 task 4, RK-13).
 
 No test may read or write real ``/storage`` datasets/users or the real
-``/storage/.ccc-layered``. Every runtime artifact must live under
+``/storage/.ccc-storage``. Every runtime artifact must live under
 ``$CCC_TEST_ROOT``, which **must** resolve inside this workspace. These are pure
 functions so they can be unit-tested directly; ``tests/conftest.py`` calls
 :func:`check_test_root` at session start and aborts the whole session on
@@ -19,7 +19,7 @@ class IsolationError(RuntimeError):
 
 
 def repo_root() -> Path:
-    """Repository root (the ``ccc-layered-storage`` dir).
+    """Repository root (the ``ccc-storage`` dir).
 
     This file is at ``<repo>/tests/fakes/isolation.py``.
     """

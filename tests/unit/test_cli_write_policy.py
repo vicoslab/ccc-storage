@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ccc_layered_cli import main as cli
-from ccc_layered_core.manifest import WRITE_POLICY_LOCAL_SSD_ASYNC
+from ccc_storage_cli import main as cli
+from ccc_storage_core.manifest import WRITE_POLICY_LOCAL_SSD_ASYNC
 
 
 def test_cli_write_policy_sends_policy_and_remount_payload(monkeypatch, capsys):

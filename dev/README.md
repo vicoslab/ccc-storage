@@ -26,7 +26,7 @@ dev/
 ## Development/test image
 
 ```bash
-docker build -f dev/docker/test.Dockerfile -t ccc-layered-storage:test .
+docker build -f dev/docker/test.Dockerfile -t ccc-storage:test .
 ```
 
 This image installs development/test extras and defaults to `make test`; it is

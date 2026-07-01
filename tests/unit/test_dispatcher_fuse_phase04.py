@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ccc_layered_mountd import dispatcher_fuse
+from ccc_storage_mountd import dispatcher_fuse
 
 
 def test_mount_dispatcher_refuses_clearly_when_pyfuse3_missing(monkeypatch):

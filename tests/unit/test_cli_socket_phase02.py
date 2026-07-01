@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from ccc_layered_cli.main import main as cli_main
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack, dump_atomic
-from ccc_layered_mountd.control import ControlServer
-from ccc_layered_mountd.daemon import MountdService
+from ccc_storage_cli.main import main as cli_main
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack, dump_atomic
+from ccc_storage_mountd.control import ControlServer
+from ccc_storage_mountd.daemon import MountdService
 
 
 def test_cli_status_and_ls_roundtrip_over_control_socket(fake_nfs, tmp_path, monkeypatch, capsys):
@@ -18,7 +18,7 @@ def test_cli_status_and_ls_roundtrip_over_control_socket(fake_nfs, tmp_path, mon
     )
     dump_atomic(fake_nfs.subdir("registry") / "foo.toml", manifest)
 
-    service = MountdService(nfs_root=fake_nfs.ccc_layered, run_dir=tmp_path / "run")
+    service = MountdService(nfs_root=fake_nfs.ccc_storage, run_dir=tmp_path / "run")
     service.reload_registry()
     sock = tmp_path / "mountd.sock"
     server = ControlServer(sock, service)

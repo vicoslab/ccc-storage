@@ -4,12 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from ccc_layered_cli import conda_shim
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack, dump_atomic, load_manifest
-from ccc_layered_mountd import daemon
-from ccc_layered_mountd.env_txn import CommandResult, EnvUpdateContext
-from ccc_layered_pack.builder import BuildResult
+from ccc_storage_cli import conda_shim
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack, dump_atomic, load_manifest
+from ccc_storage_mountd import daemon
+from ccc_storage_mountd.env_txn import CommandResult, EnvUpdateContext
+from ccc_storage_pack.builder import BuildResult
 
 
 def _fake_build_delta(src, base_manifest, out, tombstones=None):
@@ -66,7 +66,7 @@ def test_conda_shim_disable_forces_fallback():
     assert conda_shim.run_shim(
         "mamba",
         ["install", "numpy"],
-        env={"CCC_LAYERED_SHIM_DISABLE": "1", "CCC_LAYERED_ENV_SELECTOR": "myenv"},
+        env={"CCC_STORAGE_SHIM_DISABLE": "1", "CCC_STORAGE_ENV_SELECTOR": "myenv"},
         run_real=run_real,
     ) == 0
     assert calls == [["mamba", "install", "numpy"]]
@@ -82,7 +82,7 @@ def test_conda_shim_non_mutating_command_falls_back():
     assert conda_shim.run_shim(
         "conda",
         ["list", "-n", "myenv"],
-        env={"CCC_LAYERED_ENV_SELECTOR": "myenv"},
+        env={"CCC_STORAGE_ENV_SELECTOR": "myenv"},
         run_real=run_real,
     ) == 0
     assert calls == [["conda", "list", "-n", "myenv"]]
@@ -103,8 +103,8 @@ def test_conda_shim_managed_success_commits(monkeypatch, fake_nfs):
         "conda",
         ["install", "numpy"],
         env={
-            "CCC_NFS_ROOT": str(fake_nfs.ccc_layered),
-            "CCC_LAYERED_ENV_SELECTOR": "myenv",
+            "CCC_NFS_ROOT": str(fake_nfs.ccc_storage),
+            "CCC_STORAGE_ENV_SELECTOR": "myenv",
         },
         run_real=lambda argv, env: pytest.fail("should not fall back"),
         run_managed=run_managed,
@@ -127,8 +127,8 @@ def test_conda_shim_managed_failure_preserves_overlay(monkeypatch, fake_nfs):
         "mamba",
         ["remove", "bad"],
         env={
-            "CCC_NFS_ROOT": str(fake_nfs.ccc_layered),
-            "CCC_LAYERED_ENV_SELECTOR": "myenv",
+            "CCC_NFS_ROOT": str(fake_nfs.ccc_storage),
+            "CCC_STORAGE_ENV_SELECTOR": "myenv",
         },
         run_real=lambda argv, env: pytest.fail("should not fall back"),
         run_managed=run_managed,
@@ -136,7 +136,7 @@ def test_conda_shim_managed_failure_preserves_overlay(monkeypatch, fake_nfs):
 
     assert code == 9
     assert load_manifest(manifest_path).generation == 0
-    partial = fake_nfs.ccc_layered / "overlays" / "conda-env%3Amyenv" / "active" / "partial.txt"
+    partial = fake_nfs.ccc_storage / "overlays" / "conda-env%3Amyenv" / "active" / "partial.txt"
     assert partial.exists()
 
 
@@ -147,4 +147,4 @@ def test_init_conda_envs_marker_is_idempotent(tmp_path):
     conda_shim.init_conda_envs(root)
 
     assert root.is_dir()
-    assert (root / "CCC_LAYERED_OBSERVE").read_text() == ""
+    assert (root / "CCC_STORAGE_OBSERVE").read_text() == ""

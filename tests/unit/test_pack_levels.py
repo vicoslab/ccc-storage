@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from ccc_layered_core.manifest import PackInfo
-from ccc_layered_mountd.workers.levels import (
+from ccc_storage_core.manifest import PackInfo
+from ccc_storage_mountd.workers.levels import (
     LevelPolicy,
     LevelPolicyError,
     PackLevel,

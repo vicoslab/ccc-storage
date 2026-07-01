@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ccc_layered_core.manifest import ChildBoundary, ChildManifest
-from ccc_layered_core.resolve import nearest_boundary
+from ccc_storage_core.manifest import ChildBoundary, ChildManifest
+from ccc_storage_core.resolve import nearest_boundary
 
 
 def test_nearest_boundary_returns_longest_matching_child_boundary():

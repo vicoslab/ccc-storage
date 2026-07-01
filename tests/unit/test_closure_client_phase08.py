@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from ccc_layered_core.manifest import ChildBoundary, ChildManifest
-from ccc_layered_hpc.client import ExcludedChildError, StagedPackset
-from ccc_layered_hpc.closure import compute_mount_closure
+from ccc_storage_core.manifest import ChildBoundary, ChildManifest
+from ccc_storage_hpc.client import ExcludedChildError, StagedPackset
+from ccc_storage_hpc.closure import compute_mount_closure
 
 
 def _manifests():

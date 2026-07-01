@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from ccc_layered_core.checksum import sha256_file
-from ccc_layered_core.manifest import ChildManifest, PackInfo, PackStack, load_manifest
-from ccc_layered_mountd import daemon
-from ccc_layered_mountd.daemon import MountdService
-from ccc_layered_mountd.overlay import dirty_stats
-from ccc_layered_pack.builder import BuildResult
+from ccc_storage_core.checksum import sha256_file
+from ccc_storage_core.manifest import ChildManifest, PackInfo, PackStack, load_manifest
+from ccc_storage_mountd import daemon
+from ccc_storage_mountd.daemon import MountdService
+from ccc_storage_mountd.overlay import dirty_stats
+from ccc_storage_pack.builder import BuildResult
 
 
 def _write_dirty_child(fake_nfs):
@@ -19,10 +19,10 @@ def _write_dirty_child(fake_nfs):
         pack_stack=PackStack(lowers=(PackInfo(path=str(pack), sha256="a" * 64, size=4),)),
     )
     manifest_path = fake_nfs.subdir("registry") / "foo.toml"
-    from ccc_layered_core.manifest import dump_atomic
+    from ccc_storage_core.manifest import dump_atomic
 
     dump_atomic(manifest_path, manifest)
-    service = MountdService(nfs_root=fake_nfs.ccc_layered, run_dir=fake_nfs.root / "run")
+    service = MountdService(nfs_root=fake_nfs.ccc_storage, run_dir=fake_nfs.root / "run")
     service.reload_registry()
     upper = service.overlay_paths(manifest).active_upper
     upper.mkdir(parents=True, exist_ok=True)

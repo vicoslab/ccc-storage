@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ccc_layered_pack.bundle import (
+from ccc_storage_pack.bundle import (
     BundleEntry,
     MountGraph,
     MountGraphNode,

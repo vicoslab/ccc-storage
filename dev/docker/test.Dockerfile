@@ -1,9 +1,9 @@
 FROM python:3.11-slim
 
-LABEL org.opencontainers.image.title="ccc-layered-storage"
+LABEL org.opencontainers.image.title="ccc-storage"
 LABEL org.opencontainers.image.description="Optional dev/test image for CCC layered storage"
 
-WORKDIR /workspace/ccc-layered-storage
+WORKDIR /workspace/ccc-storage
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
