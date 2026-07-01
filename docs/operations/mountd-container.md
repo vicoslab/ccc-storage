@@ -87,8 +87,8 @@ published layered folder, commits, remounts, and reads the committed data. See
 
 ## Inventory role
 
-The CCC inventory role is `layered-storage-mountd`.  It is default-off.  See:
+The CCC inventory role is `ccc-storage-mountd`.  It is default-off.  See the inventory repo:
 
 ```text
-../ccc-inventory-layered-storage/playbook/roles/layered-storage-mountd/README.md
+ccc-inventory/playbook/roles/ccc-storage-mountd/README.md
 ```
